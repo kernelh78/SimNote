@@ -171,62 +171,70 @@ class _MobileSidebar extends StatelessWidget {
           ),
           const Divider(),
 
-          // 즐겨찾기
-          ListTile(
-            leading: const Icon(Icons.star_outline),
-            title: const Text('즐겨찾기'),
-            selected: provider.sidebarMode == SidebarMode.favorites,
-            onTap: () {
-              provider.selectFavorites();
-              Navigator.pop(context);
-            },
-          ),
-
-          const SizedBox(height: 8),
-
-          // 폴더 섹션
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          // 스크롤 가능한 목록
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 16),
               children: [
-                Text(
-                  '폴더',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                // 즐겨찾기
+                ListTile(
+                  leading: const Icon(Icons.star_outline),
+                  title: const Text('즐겨찾기'),
+                  selected: provider.sidebarMode == SidebarMode.favorites,
+                  onTap: () {
+                    provider.selectFavorites();
+                    Navigator.pop(context);
+                  },
+                ),
+
+                const SizedBox(height: 8),
+
+                // 폴더 섹션
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '폴더',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add, size: 18),
+                        onPressed: () => _showAddNotebookDialog(context),
+                      ),
+                    ],
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.add, size: 18),
-                  onPressed: () => _showAddNotebookDialog(context),
+                ...provider.notebooks.map(
+                  (nb) => _NotebookTile(nb: nb, provider: provider),
                 ),
+
+                // 태그 섹션
+                if (provider.allTags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                    child: Text(
+                      '태그',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  ...provider.allTags.map(
+                    (tag) => _TagTile(tag: tag, provider: provider),
+                  ),
+                ],
               ],
             ),
           ),
-          ...provider.notebooks.map(
-            (nb) => _NotebookTile(nb: nb, provider: provider),
-          ),
-
-          // 태그 섹션
-          if (provider.allTags.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-              child: Text(
-                '태그',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            ...provider.allTags.map(
-              (tag) => _TagTile(tag: tag, provider: provider),
-            ),
-          ],
         ],
       ),
     );
