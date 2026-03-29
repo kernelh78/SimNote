@@ -2,13 +2,13 @@
 
 > 클라우드 없이, 같은 Wi-Fi 안의 내 기기끼리만 동기화되는 메모 앱
 
-작성일: 2026-03-29 (최종 업데이트)
+작성일: 2026-03-29 | 최종 업데이트: 2026-03-29
 
 ---
 
 ## 현재 상태
 
-**5단계 완료.** 맥 ↔ 안드로이드 간 AES-256 암호화 양방향 동기화 작동.
+**8단계 완료.** 맥 ↔ 안드로이드 암호화 동기화 + iOS 지원 + 마크다운 렌더링 + 노트 내보내기(PDF/텍스트) 완료.
 
 ---
 
@@ -73,6 +73,36 @@
 | 기기별 세션 키 영구 저장 (TrustedDevices) | 완료 |
 | 신뢰 기기 재연결 시 저장 키로 자동 암호화 | 완료 |
 | 전송 패킷 구조: IV.ciphertext (base64) | 완료 |
+| 세션 키 없는 구버전 페어링 → 자동 PIN 재인증 유도 | 완료 |
+
+### 6단계 — iOS 지원 ✅
+
+| 기능 | 상태 |
+|------|------|
+| iOS 빌드 설정 (Podfile, 최소 버전 14.0) | 완료 |
+| 로컬 네트워크 권한 (NSLocalNetworkUsageDescription) | 완료 |
+| Bonjour 서비스 등록 (NSBonjourServices) | 완료 |
+| iPhone 시뮬레이터 동작 확인 | 완료 |
+
+### 7단계 — 마크다운 렌더링 ✅
+
+| 기능 | 상태 |
+|------|------|
+| 편집 ↔ 미리보기 토글 버튼 (연필 / 눈 아이콘) | 완료 |
+| 미리보기: h1·h2·h3, 굵기, 기울임, 코드, 인용 | 완료 |
+| 미리보기 전환 시 자동 저장 | 완료 |
+| 데스크탑(NoteEditor) + 모바일(MobileEditorScreen) 동일 적용 | 완료 |
+| 힌트 텍스트에 마크다운 문법 안내 | 완료 |
+
+### 8단계 — 노트 내보내기 ✅
+
+| 기능 | 상태 |
+|------|------|
+| PDF 내보내기 (마크다운 → HTML → PDF, 한글 폰트 지원) | 완료 |
+| 텍스트(.md) 내보내기 (제목·날짜·폴더·태그 메타 포함) | 완료 |
+| 데스크탑: 툴바 공유 아이콘 팝업 | 완료 |
+| 모바일: ⋮ 팝업 메뉴에 내보내기 항목 추가 | 완료 |
+| 플랫폼 공유 시트 연동 (share_plus) | 완료 |
 
 ---
 
@@ -115,6 +145,8 @@ sim_note/lib/
 │   └── tag.dart
 ├── database/
 │   └── db_service.dart      # mergeRemoteNotes(), resolveConflict(), _setTags()
+├── export/
+│   └── note_exporter.dart   # PDF / 텍스트 내보내기 (share_plus + printing)
 ├── sync/
 │   ├── discovery_service.dart   # UDP 브로드캐스트 탐색
 │   ├── sync_server.dart         # TCP 서버, salt 생성, 암호화 응답
@@ -138,7 +170,7 @@ sim_note/lib/
     ├── conflict_dialog.dart     # 충돌 해결 UI
     ├── sidebar.dart
     ├── note_list.dart
-    ├── note_editor.dart
+    ├── note_editor.dart         # 마크다운 미리보기 + 내보내기 버튼
     └── mobile_layout.dart
 ```
 
@@ -164,16 +196,21 @@ sim_note/lib/
 | 병합 시 노트북 소속 미변경 | mergeRemoteNotes가 내용만 업데이트, 노트북 재배정 없음 | _moveNoteToNotebook 헬퍼 추가 |
 | resolveConflictKeepBoth 크래시 | writeTxn 안에서 _setTags 호출 (중첩 트랜잭션) | _setTags를 txn 밖으로 분리 |
 | PIN 확인 버튼 항상 비활성화 | TextField onChanged에서 setState 미호출 | onChanged: (_) => setState(() {}) 추가 |
+| 그래픽 오버플로우 (드로어 52px) | Column 안에 Expanded ListView 구조 오류 | SafeArea(child: ListView(...)) 최상위 구조로 교체 |
+| 그래픽 오버플로우 (에디터 키보드 122px) | TextField expands:true + SingleChildScrollView 충돌 | maxLines:null + viewInsets.bottom 패딩으로 교체 |
+| 암호화 후 기존 페어링 동기화 불가 | 구버전 페어링의 세션 키가 빈 문자열로 저장됨 → 서버가 kTrusted 전송 시 복호화 불가 | 서버에서 키 유효성 검사 후 빈 키면 PIN 재인증 강제 |
+| 맥 업데이트 후 동기화 여전히 실패 | 신버전 앱 설치 후 구버전 프로세스가 계속 실행 중 | 구 프로세스 종료 후 신버전 실행 |
+| PDF 한글 폰트 깨짐 방지 | pdf 패키지의 내장 폰트는 한글 미지원 | Printing.convertHtml() 사용 → WebKit 렌더러가 시스템 폰트로 처리 |
 
 ---
 
 ## 향후 진행 사항
 
 - [ ] 자동 동기화 (같은 네트워크 감지 시 백그라운드 자동 실행)
-- [ ] iOS / Windows 지원
-- [ ] 마크다운 렌더링
-- [ ] 노트 내보내기 (PDF, 텍스트)
+- [ ] iOS 실기기 배포 (애플 개발자 계정 필요)
+- [ ] Windows 지원
 - [ ] 비승인 기기 접근 차단 및 알림
+- [ ] 맥 Save As 다이얼로그 (내보내기 위치 직접 선택)
 
 ---
 
@@ -184,4 +221,5 @@ sim_note/lib/
 | 맥 | macOS (Apple Silicon) |
 | 안드로이드 | Samsung Galaxy |
 | 공유기 | TP-Link AX1500 |
-| 테스트 내용 | 양방향 동기화 (노트, 태그, 폴더, 즐겨찾기, 삭제, 충돌 해결) |
+| iOS | iPhone 17 Pro 시뮬레이터 |
+| 테스트 내용 | 양방향 동기화, 마크다운 미리보기, PDF/텍스트 내보내기 |
