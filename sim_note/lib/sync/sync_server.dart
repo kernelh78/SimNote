@@ -60,10 +60,15 @@ class SyncServer {
             final clientName = msg['name'] as String? ?? '알 수 없는 기기';
             pendingClientId  = clientId;
 
-            if (await TrustedDevices.isTrusted(clientId)) {
-              sessionKey = await TrustedDevices.getKey(clientId);
+            final storedKey = await TrustedDevices.getKey(clientId);
+            final hasValidKey = storedKey != null && storedKey.isNotEmpty;
+
+            if (hasValidKey) {
+              // 유효한 세션 키가 있는 신뢰 기기
+              sessionKey = storedKey;
               sendMsg(client, {'type': kTrusted, 'deviceId': myId});
             } else {
+              // 최초 연결이거나 키가 없는 구버전 페어링 → PIN 재인증
               pendingPin  = _generatePin();
               pendingSalt = SyncCrypto.randomSalt();
               sendMsg(client, {

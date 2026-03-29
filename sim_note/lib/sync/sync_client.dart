@@ -66,9 +66,11 @@ class SyncClient {
 
       } else if (responseType == kTrusted) {
         // 3b. 기존 신뢰 기기 — 저장된 키 사용
+        // (서버가 kTrusted를 보냈다면 유효한 키가 있음이 보장됨)
         final stored = await TrustedDevices.getKey(serverId);
         if (stored == null || stored.isEmpty) {
-          throw '저장된 세션 키가 없습니다. 다시 PIN 인증이 필요합니다.';
+          // 키 불일치 — 이쪽만 키가 없는 예외 상황, 재연결 유도
+          throw 'PIN 재인증이 필요합니다. 동기화 버튼을 다시 눌러주세요.';
         }
         sessionKey = stored;
 
