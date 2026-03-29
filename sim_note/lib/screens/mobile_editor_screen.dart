@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../export/note_exporter.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/note_tag_row.dart';
@@ -39,6 +40,27 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
     final note = provider.selectedNote;
     if (note == null) return;
     provider.saveNote(note.id, _titleController.text, _bodyController.text);
+  }
+
+  Future<void> _export(BuildContext ctx, Note note, String type) async {
+    await note.notebook.load();
+    await note.tags.load();
+    final nbName   = note.notebook.value?.name ?? '기본';
+    final tagNames = note.tags.map((t) => t.name).toList();
+    try {
+      if (type == 'pdf') {
+        await NoteExporter.shareAsPdf(
+            note: note, notebookName: nbName, tagNames: tagNames);
+      } else {
+        await NoteExporter.shareAsText(
+            note: note, notebookName: nbName, tagNames: tagNames);
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(content: Text('내보내기 실패: $e')));
+      }
+    }
   }
 
   @override
@@ -81,11 +103,18 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
             onPressed: () => provider.toggleFavorite(note.id),
           ),
           PopupMenuButton<String>(
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'delete', child: Text('삭제')),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'pdf',    child: Text('PDF로 내보내기')),
+              PopupMenuItem(value: 'text',   child: Text('텍스트로 내보내기')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'delete', child: Text('삭제')),
             ],
             onSelected: (action) {
-              if (action == 'delete') _confirmDelete(context, provider, note);
+              if (action == 'delete') {
+                _confirmDelete(context, provider, note);
+              } else {
+                _export(context, note, action);
+              }
             },
           ),
         ],

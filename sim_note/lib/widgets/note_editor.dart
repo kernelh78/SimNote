@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../export/note_exporter.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import 'note_tag_row.dart';
@@ -40,6 +41,27 @@ class _NoteEditorState extends State<NoteEditor> {
     final note = provider.selectedNote;
     if (note == null) return;
     provider.saveNote(note.id, _titleController.text, _bodyController.text);
+  }
+
+  Future<void> _export(BuildContext ctx, Note note, String type) async {
+    await note.notebook.load();
+    await note.tags.load();
+    final nbName  = note.notebook.value?.name ?? '기본';
+    final tagNames = note.tags.map((t) => t.name).toList();
+    try {
+      if (type == 'pdf') {
+        await NoteExporter.shareAsPdf(
+            note: note, notebookName: nbName, tagNames: tagNames);
+      } else {
+        await NoteExporter.shareAsText(
+            note: note, notebookName: nbName, tagNames: tagNames);
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(ctx).showSnackBar(
+            SnackBar(content: Text('내보내기 실패: $e')));
+      }
+    }
   }
 
   @override
@@ -106,6 +128,15 @@ class _NoteEditorState extends State<NoteEditor> {
                   tooltip: '삭제',
                   onPressed: () => _confirmDelete(context, provider, note),
                 ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.ios_share_outlined),
+                tooltip: '내보내기',
+                onSelected: (v) => _export(context, note, v),
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'pdf',  child: Text('PDF로 내보내기')),
+                  PopupMenuItem(value: 'text', child: Text('텍스트(.md)로 내보내기')),
+                ],
+              ),
               const SyncButton(),
             ],
           ),
