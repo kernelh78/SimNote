@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/app_provider.dart';
@@ -14,8 +15,9 @@ class MobileEditorScreen extends StatefulWidget {
 
 class _MobileEditorScreenState extends State<MobileEditorScreen> {
   final _titleController = TextEditingController();
-  final _bodyController = TextEditingController();
+  final _bodyController  = TextEditingController();
   Note? _loadedNote;
+  bool _preview = false;
 
   @override
   void dispose() {
@@ -28,7 +30,8 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
     if (note?.id != _loadedNote?.id) {
       _loadedNote = note;
       _titleController.text = note?.title ?? '';
-      _bodyController.text = note?.body ?? '';
+      _bodyController.text  = note?.body  ?? '';
+      _preview = false;
     }
   }
 
@@ -41,7 +44,7 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
-    final note = provider.selectedNote;
+    final note     = provider.selectedNote;
 
     if (note == null) {
       return Scaffold(
@@ -61,6 +64,15 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
           style: const TextStyle(fontSize: 16),
         ),
         actions: [
+          // 미리보기 토글
+          IconButton(
+            icon: Icon(_preview ? Icons.edit_outlined : Icons.visibility_outlined),
+            tooltip: _preview ? '편집 모드' : '미리보기',
+            onPressed: () {
+              if (!_preview) _save(provider);
+              setState(() => _preview = !_preview);
+            },
+          ),
           IconButton(
             icon: Icon(
               note.isFavorite ? Icons.star : Icons.star_outline,
@@ -80,71 +92,91 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
       ),
       body: Column(
         children: [
-          // 제목
+          // ── 제목 ──────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-            child: TextField(
-              controller: _titleController,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-              ),
-              decoration: const InputDecoration(
-                hintText: '제목',
-                border: InputBorder.none,
-              ),
-              onChanged: (_) => _save(provider),
-            ),
+            child: _preview
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(_titleController.text,
+                        style: const TextStyle(
+                            fontSize: 22, fontWeight: FontWeight.w600)),
+                  )
+                : TextField(
+                    controller: _titleController,
+                    style: const TextStyle(
+                        fontSize: 22, fontWeight: FontWeight.w600),
+                    decoration: const InputDecoration(
+                      hintText: '제목',
+                      border: InputBorder.none,
+                    ),
+                    onChanged: (_) => _save(provider),
+                  ),
           ),
 
-          // 날짜
+          // ── 날짜 ──────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text(
-                dateStr,
-                style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-              ),
+              child: Text(dateStr,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[400])),
             ),
           ),
 
-          // 태그
+          // ── 태그 ──────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
             child: NoteTagRow(note: note, provider: provider),
           ),
 
           const Divider(height: 20),
 
-          // 본문
+          // ── 본문: 편집 or 마크다운 미리보기 ──────────────
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: TextField(
-                controller: _bodyController,
-                maxLines: null,
-                expands: true,
-                decoration: const InputDecoration(
-                  hintText: '내용을 입력하세요...',
-                  border: InputBorder.none,
-                ),
-                style: const TextStyle(fontSize: 16, height: 1.7),
-                textAlignVertical: TextAlignVertical.top,
-                onChanged: (_) => _save(provider),
-              ),
-            ),
+            child: _preview
+                ? Markdown(
+                    data: _bodyController.text.isEmpty
+                        ? '*내용이 없습니다*'
+                        : _bodyController.text,
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    styleSheet:
+                        MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                      p:    const TextStyle(fontSize: 16, height: 1.7),
+                      h1:   const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      h2:   const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      h3:   const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      code: TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        backgroundColor: Theme.of(context)
+                            .colorScheme.surfaceContainerHighest,
+                      ),
+                    ),
+                  )
+                : SingleChildScrollView(
+                    padding: EdgeInsets.only(
+                      left: 20, right: 20,
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                    ),
+                    child: TextField(
+                      controller: _bodyController,
+                      maxLines: null,
+                      decoration: const InputDecoration(
+                        hintText: '내용을 입력하세요...\n\n마크다운을 지원합니다:\n# 제목  **굵게**  *기울임*  `코드`',
+                        border: InputBorder.none,
+                      ),
+                      style: const TextStyle(fontSize: 16, height: 1.7),
+                      onChanged: (_) => _save(provider),
+                    ),
+                  ),
           ),
         ],
       ),
     );
   }
 
-  void _confirmDelete(
-    BuildContext context,
-    AppProvider provider,
-    Note note,
-  ) {
+  void _confirmDelete(BuildContext context, AppProvider provider, Note note) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
