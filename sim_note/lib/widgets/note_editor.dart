@@ -109,55 +109,61 @@ class _NoteEditorState extends State<NoteEditor> {
         ),
         const Divider(height: 1),
 
-        // 제목
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-          child: TextField(
-            controller: _titleController,
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
-            decoration: const InputDecoration(
-              hintText: '제목',
-              border: InputBorder.none,
-            ),
-            onSubmitted: (_) => _save(provider),
-          ),
-        ),
-
-        // 날짜
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              dateStr,
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-            ),
-          ),
-        ),
-
-        // 태그 입력
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-          child: NoteTagRow(note: note, provider: provider),
-        ),
-
-        const Divider(height: 24),
-
-        // 본문
+        // 툴바 아래 전체: 키보드가 올라와도 스크롤되도록 Expanded + SingleChildScrollView
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-            child: TextField(
-              controller: _bodyController,
-              maxLines: null,
-              expands: true,
-              decoration: const InputDecoration(
-                hintText: '내용을 입력하세요...',
-                border: InputBorder.none,
-              ),
-              style: const TextStyle(fontSize: 15, height: 1.7),
-              textAlignVertical: TextAlignVertical.top,
-              onChanged: (_) => _save(provider),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 제목
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                  child: TextField(
+                    controller: _titleController,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
+                    decoration: const InputDecoration(
+                      hintText: '제목',
+                      border: InputBorder.none,
+                    ),
+                    onSubmitted: (_) => _save(provider),
+                  ),
+                ),
+
+                // 날짜
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    dateStr,
+                    style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                  ),
+                ),
+
+                // 태그 입력
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                  child: NoteTagRow(note: note, provider: provider),
+                ),
+
+                const Divider(height: 24),
+
+                // 본문 — 내용에 따라 자동으로 늘어남
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+                  child: TextField(
+                    controller: _bodyController,
+                    maxLines: null,
+                    decoration: const InputDecoration(
+                      hintText: '내용을 입력하세요...',
+                      border: InputBorder.none,
+                    ),
+                    style: const TextStyle(fontSize: 15, height: 1.7),
+                    onChanged: (_) => _save(provider),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
