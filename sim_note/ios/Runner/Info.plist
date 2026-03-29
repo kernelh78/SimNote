@@ -4,10 +4,17 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>같은 Wi-Fi의 SimNote 기기를 찾고 동기화하기 위해 로컬 네트워크 접근이 필요합니다.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_simnote._tcp</string>
+		<string>_simnote._udp</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Sim Note</string>
+	<string>SimNote</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
