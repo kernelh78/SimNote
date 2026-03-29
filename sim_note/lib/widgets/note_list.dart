@@ -117,8 +117,14 @@ class _NoteListItem extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (note.isFavorite)
-                  const Icon(Icons.star, size: 14, color: Colors.amber),
+                GestureDetector(
+                  onTap: () => provider.toggleFavorite(note.id),
+                  child: Icon(
+                    note.isFavorite ? Icons.star : Icons.star_outline,
+                    size: 16,
+                    color: note.isFavorite ? Colors.amber : Colors.grey[400],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 4),

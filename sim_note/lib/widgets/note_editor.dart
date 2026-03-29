@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
+import 'note_tag_row.dart';
+import 'sync_panel.dart';
 
 class NoteEditor extends StatefulWidget {
   const NoteEditor({super.key});
@@ -47,11 +49,25 @@ class _NoteEditorState extends State<NoteEditor> {
     _syncControllers(note);
 
     if (note == null) {
-      return const Center(
-        child: Text(
-          '메모를 선택하거나 새 메모를 만드세요',
-          style: TextStyle(color: Colors.grey),
-        ),
+      return Column(
+        children: [
+          Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: const Row(
+              children: [Spacer(), SyncButton()],
+            ),
+          ),
+          const Divider(height: 1),
+          const Expanded(
+            child: Center(
+              child: Text(
+                '메모를 선택하거나 새 메모를 만드세요',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -87,6 +103,7 @@ class _NoteEditorState extends State<NoteEditor> {
                 tooltip: '삭제',
                 onPressed: () => _confirmDelete(context, provider, note),
               ),
+              const SyncButton(),
             ],
           ),
         ),
@@ -121,7 +138,7 @@ class _NoteEditorState extends State<NoteEditor> {
         // 태그 입력
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-          child: _TagRow(note: note, provider: provider),
+          child: NoteTagRow(note: note, provider: provider),
         ),
 
         const Divider(height: 24),
@@ -172,66 +189,6 @@ class _NoteEditorState extends State<NoteEditor> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _TagRow extends StatelessWidget {
-  final Note note;
-  final AppProvider provider;
-
-  const _TagRow({required this.note, required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = TextEditingController();
-
-    return FutureBuilder(
-      future: () async {
-        await note.tags.load();
-        return note.tags.toList();
-      }(),
-      builder: (context, snapshot) {
-        final tags = snapshot.data ?? [];
-
-        return Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ...tags.map(
-              (tag) => Chip(
-                label: Text('#${tag.name}', style: const TextStyle(fontSize: 12)),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: EdgeInsets.zero,
-                deleteIconColor: Colors.grey,
-                onDeleted: () => provider.removeTagFromNote(note.id, tag.id),
-              ),
-            ),
-            // 태그 추가 입력
-            SizedBox(
-              width: 120,
-              child: TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  hintText: '태그 추가...',
-                  hintStyle: TextStyle(fontSize: 12),
-                  border: InputBorder.none,
-                  isDense: true,
-                ),
-                style: const TextStyle(fontSize: 12),
-                onSubmitted: (value) {
-                  final tag = value.replaceAll('#', '').trim();
-                  if (tag.isNotEmpty) {
-                    provider.addTagToNote(note.id, tag);
-                    controller.clear();
-                  }
-                },
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../database/db_service.dart';
 import '../providers/app_provider.dart';
 import '../providers/sync_provider.dart';
+import '../widgets/conflict_dialog.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/note_list.dart';
 import '../widgets/note_editor.dart';
 import '../widgets/mobile_layout.dart';
-import '../widgets/sync_panel.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -48,12 +49,34 @@ class _HomeScreenState extends State<HomeScreen> {
       _showPinInputDialog(sync);
     }
 
-    // 동기화 완료 시 노트 목록 갱신
+    // 동기화 완료 시 노트 목록 갱신 + 충돌 처리
     if (sync.syncState == SyncState.done && _prevState != SyncState.done) {
       context.read<AppProvider>().load();
+      if (sync.pendingConflicts.isNotEmpty) {
+        _handleConflicts(sync);
+      }
     }
 
     _prevState = sync.syncState;
+  }
+
+  Future<void> _handleConflicts(SyncProvider sync) async {
+    for (final conflict in List.of(sync.pendingConflicts)) {
+      if (!mounted) break;
+      final choice = await showConflictDialog(context, conflict);
+      if (choice == null) break;
+
+      if (choice == 'remote') {
+        await DbService.resolveConflict(conflict, false);
+      } else if (choice == 'both') {
+        await DbService.resolveConflictKeepBoth(conflict);
+      }
+      // 'local' → 아무것도 안 함
+    }
+    if (mounted) {
+      context.read<AppProvider>().load();
+      sync.clearConflicts();
+    }
   }
 
   void _showPinDisplayDialog(SyncProvider sync) {
@@ -84,18 +107,13 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context, constraints) {
         if (constraints.maxWidth >= 700) {
           return Scaffold(
-            body: Stack(
+            body: Row(
               children: [
-                Row(
-                  children: [
-                    const SizedBox(width: 220, child: Sidebar()),
-                    const VerticalDivider(width: 1),
-                    const SizedBox(width: 260, child: NoteList()),
-                    const VerticalDivider(width: 1),
-                    const Expanded(child: NoteEditor()),
-                  ],
-                ),
-                const Positioned(top: 8, right: 8, child: SyncButton()),
+                const SizedBox(width: 220, child: Sidebar()),
+                const VerticalDivider(width: 1),
+                const SizedBox(width: 260, child: NoteList()),
+                const VerticalDivider(width: 1),
+                const Expanded(child: NoteEditor()),
               ],
             ),
           );
@@ -225,6 +243,7 @@ class _PinInputDialogState extends State<_PinInputDialog> {
               counterText: '',
             ),
             style: const TextStyle(fontSize: 28, letterSpacing: 8),
+            onChanged: (_) => setState(() {}),
             onSubmitted: (_) => _submit(sync),
           ),
         ],

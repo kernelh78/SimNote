@@ -2,13 +2,13 @@
 
 > 클라우드 없이, 같은 Wi-Fi 안의 내 기기끼리만 동기화되는 메모 앱
 
-작성일: 2026-03-28
+작성일: 2026-03-29 (최종 업데이트)
 
 ---
 
 ## 현재 상태
 
-**3단계 완료.** 맥과 안드로이드 간 양방향 노트 동기화 작동 확인.
+**5단계 완료.** 맥 ↔ 안드로이드 간 AES-256 암호화 양방향 동기화 작동.
 
 ---
 
@@ -20,8 +20,8 @@
 |------|------|
 | Flutter 프로젝트 (Android + macOS) | 완료 |
 | Isar DB 연동 (Notebook, Note, Tag) | 완료 |
-| 메모 작성 / 수정 / 삭제 | 완료 |
-| 폴더(Notebook) 생성 및 메모 분류 | 완료 |
+| 메모 작성 / 수정 / 삭제 (소프트 삭제) | 완료 |
+| 폴더(Notebook) 생성 / 이름 변경 / 삭제 | 완료 |
 | 해시태그 추가 및 태그별 필터링 | 완료 |
 | 즐겨찾기 기능 | 완료 |
 | 실시간 검색 (제목 + 본문) | 완료 |
@@ -51,30 +51,95 @@
 | 동기화 완료 후 UI 자동 갱신 | 완료 |
 | 동기화 상태 표시 (연결중 / PIN / 동기화중 / 완료 / 오류) | 완료 |
 
+### 4단계 — 스마트 동기화 ✅
+
+| 기능 | 상태 |
+|------|------|
+| 소프트 삭제 전파 (isDeleted + deletedAt) | 완료 |
+| 충돌 감지 (양쪽 모두 마지막 동기화 이후 수정) | 완료 |
+| 충돌 해결 UI (내 버전 / 상대 버전 / 둘 다 유지) | 완료 |
+| 태그 동기화 (추가 / 삭제 / 변경 감지) | 완료 |
+| 폴더 이름 변경 동기화 | 완료 |
+| 즐겨찾기 변경 동기화 | 완료 |
+| 동기화 로그 (추가 / 수정 / 삭제 / 태그변경 / 충돌해결) | 완료 |
+| 마지막 동기화 시각 저장 (SyncStateStore) | 완료 |
+
+### 5단계 — 보안 강화 ✅
+
+| 기능 | 상태 |
+|------|------|
+| AES-256-CBC 전송 암호화 | 완료 |
+| PIN + salt → SHA-256 세션 키 파생 | 완료 |
+| 기기별 세션 키 영구 저장 (TrustedDevices) | 완료 |
+| 신뢰 기기 재연결 시 저장 키로 자동 암호화 | 완료 |
+| 전송 패킷 구조: IV.ciphertext (base64) | 완료 |
+
 ---
 
 ## 핵심 기술 구조
 
 ```
 기기 탐색:  UDP 브로드캐스트 (포트 8766, 3초마다)
-인증:       TCP 소켓 + 6자리 PIN → 신뢰 기기 파일 저장
+인증:       TCP 소켓 + 6자리 PIN → SHA-256(PIN:salt) → 세션 키
+암호화:     AES-256-CBC, IV 앞부분 포함 (base64 인코딩)
 데이터:     JSON-Lines 프로토콜 over TCP (포트 8765)
-병합:       updatedAt 타임스탬프 비교 (최신 우선)
+병합:       updatedAt 타임스탬프 비교 + 충돌 감지
 로컬 DB:    Isar (NoSQL, 오프라인 우선)
 상태관리:   Provider (AppProvider + SyncProvider)
 ```
 
-### 동기화 흐름
+### 동기화 흐름 (5단계 기준)
 
 ```
-[클라이언트] 동기화 버튼 클릭
+[클라이언트]
     → TCP 연결 (8765)
     → Hello 전송 (deviceId 포함)
-    → 신뢰 기기면 즉시 / 아니면 PIN 교환
-    → 내 노트 전체 전송
-    → 서버가 병합 후 자신의 노트 전체 응답
-    → 클라이언트도 병합
+    → 신뢰 기기: TrustedDevices에서 세션 키 로드
+      첫 연결: 서버가 salt 전달 → PIN 교환 → SHA-256(PIN:salt) 세션 키 파생 → 저장
+    → 내 노트 전체를 AES-256 암호화해서 전송
+    → 서버도 암호화해서 응답
+    → 양쪽 복호화 후 병합
+    → 충돌 있으면 UI에서 선택
     → 양쪽 UI 갱신
+```
+
+---
+
+## 파일 구조
+
+```
+sim_note/lib/
+├── models/
+│   ├── note.dart            # syncId(UUID), isDeleted, deletedAt 포함
+│   ├── notebook.dart
+│   └── tag.dart
+├── database/
+│   └── db_service.dart      # mergeRemoteNotes(), resolveConflict(), _setTags()
+├── sync/
+│   ├── discovery_service.dart   # UDP 브로드캐스트 탐색
+│   ├── sync_server.dart         # TCP 서버, salt 생성, 암호화 응답
+│   ├── sync_client.dart         # TCP 클라이언트, salt 수신, 암호화 전송
+│   ├── sync_protocol.dart       # JSON-Lines + sendEncrypted/decryptMsg
+│   ├── sync_crypto.dart         # AES-256-CBC, SHA-256 키 파생
+│   ├── sync_state_store.dart    # 마지막 동기화 시각 저장
+│   ├── sync_conflict.dart       # 충돌 데이터 모델
+│   ├── sync_log.dart            # 동기화 로그 (최대 200건)
+│   ├── trusted_devices.dart     # 기기별 세션 키 저장
+│   └── device_identity.dart     # 기기 고유 UUID
+├── providers/
+│   ├── app_provider.dart        # 노트/폴더/태그 상태 관리
+│   └── sync_provider.dart       # 동기화 상태, PIN Completer
+├── screens/
+│   ├── home_screen.dart         # PIN 다이얼로그, 충돌 처리, 갱신
+│   └── mobile_editor_screen.dart
+└── widgets/
+    ├── sync_panel.dart          # 안테나 버튼, 기기 목록, 동기화 로그 탭
+    ├── note_tag_row.dart        # 태그 입력/표시 (Mac + Android 공용)
+    ├── conflict_dialog.dart     # 충돌 해결 UI
+    ├── sidebar.dart
+    ├── note_list.dart
+    ├── note_editor.dart
+    └── mobile_layout.dart
 ```
 
 ---
@@ -89,63 +154,26 @@
 | 맥 PIN 다이얼로그 미표시 | addPostFrameCallback 타이밍 불안정 | HomeScreen StatefulWidget + addListener |
 | 안드로이드 PIN 입력창 미표시 | 바텀시트 닫힌 후 상태 변경 | PIN 입력을 AlertDialog로 이동 |
 | 동기화 후 노트 미갱신 | AppProvider 갱신 트리거 없음 | SyncState.done 시 AppProvider.load() 호출 |
-
----
-
-## 파일 구조
-
-```
-sim_note/lib/
-├── models/
-│   ├── note.dart          # syncId(UUID) 포함 노트 모델
-│   ├── notebook.dart
-│   └── tag.dart
-├── database/
-│   └── db_service.dart    # getAllNotesForSync(), mergeRemoteNotes()
-├── sync/
-│   ├── discovery_service.dart  # UDP 브로드캐스트 탐색
-│   ├── sync_server.dart        # TCP 서버 (포트 8765)
-│   ├── sync_client.dart        # TCP 클라이언트
-│   ├── sync_protocol.dart      # JSON-Lines 프로토콜
-│   ├── device_identity.dart    # 기기 고유 UUID
-│   └── trusted_devices.dart   # 신뢰 기기 목록
-├── providers/
-│   ├── app_provider.dart       # 노트 상태 관리
-│   └── sync_provider.dart      # 동기화 상태 관리
-├── screens/
-│   └── home_screen.dart        # PIN 다이얼로그, 동기화 완료 후 갱신
-└── widgets/
-    ├── sync_panel.dart         # 안테나 버튼, 기기 목록 바텀시트
-    ├── sidebar.dart
-    ├── note_list.dart
-    ├── note_editor.dart
-    └── mobile_layout.dart
-```
+| 태그 저장 안 됨 (Mac) | _TagRow가 StatelessWidget → 컨트롤러 매 빌드마다 재생성 | StatefulWidget으로 변경 |
+| 태그 저장 안 됨 (Android) | MobileEditorScreen에 별도의 구식 _TagRow 존재 | 공용 NoteTagRow 위젯으로 통합 |
+| 태그 동기화 안 됨 | 태그 추가/삭제 시 note.updatedAt 미갱신 | addTagToNote / removeTagFromNote에서 updatedAt 갱신 |
+| Isar 트랜잭션 오류 | writeTxn 안에서 async read (_setTags, 노트북 조회) | 모든 read를 트랜잭션 밖으로 이동 |
+| 사이드바 오버플로우 | Column에 Expanded 없음 | Expanded(ListView) 로 감쌈 |
+| 즐겨찾기 변경 미동기화 | toggleFavorite에서 updatedAt 미갱신 | updatedAt = DateTime.now() 추가 |
+| 폴더 이름 변경 미동기화 | renameNotebook이 소속 노트 updatedAt 미갱신 | 소속 노트 전체 updatedAt 갱신 |
+| 병합 시 노트북 소속 미변경 | mergeRemoteNotes가 내용만 업데이트, 노트북 재배정 없음 | _moveNoteToNotebook 헬퍼 추가 |
+| resolveConflictKeepBoth 크래시 | writeTxn 안에서 _setTags 호출 (중첩 트랜잭션) | _setTags를 txn 밖으로 분리 |
+| PIN 확인 버튼 항상 비활성화 | TextField onChanged에서 setState 미호출 | onChanged: (_) => setState(() {}) 추가 |
 
 ---
 
 ## 향후 진행 사항
 
-### 4단계 — 충돌 해결 (다음)
-
-현재는 updatedAt 기준으로 더 최신인 쪽이 이깁니다.
-아래 케이스는 아직 미처리:
-
-- [ ] 양쪽에서 같은 노트를 동시에 수정했을 때 사용자에게 선택권 제공
-- [ ] 한쪽에서 삭제 + 다른 쪽에서 수정한 경우 처리
-- [ ] 동기화 로그 (무엇이 어떻게 바뀌었는지)
-
-### 5단계 — 보안 강화
-
-- [ ] 전송 데이터 AES-256 암호화
-- [ ] 비승인 기기 접근 차단 및 알림
-
-### 추가 개선 아이디어
-
 - [ ] 자동 동기화 (같은 네트워크 감지 시 백그라운드 자동 실행)
 - [ ] iOS / Windows 지원
 - [ ] 마크다운 렌더링
 - [ ] 노트 내보내기 (PDF, 텍스트)
+- [ ] 비승인 기기 접근 차단 및 알림
 
 ---
 
@@ -153,7 +181,7 @@ sim_note/lib/
 
 | 항목 | 내용 |
 |------|------|
-| 맥 | macOS (Apple Silicon), IP 192.168.0.169 |
-| 안드로이드 | Samsung Galaxy, IP 192.168.0.209 |
+| 맥 | macOS (Apple Silicon) |
+| 안드로이드 | Samsung Galaxy |
 | 공유기 | TP-Link AX1500 |
-| 테스트 내용 | 양방향 노트 동기화 성공 확인 |
+| 테스트 내용 | 양방향 동기화 (노트, 태그, 폴더, 즐겨찾기, 삭제, 충돌 해결) |

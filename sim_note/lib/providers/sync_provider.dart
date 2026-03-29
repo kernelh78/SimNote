@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../sync/discovery_service.dart';
 import '../sync/sync_client.dart';
+import '../sync/sync_conflict.dart';
 import '../sync/sync_server.dart';
 
 class DiscoveredDevice {
@@ -49,11 +50,12 @@ class SyncProvider extends ChangeNotifier {
   String? discoveryError;
 
   // 연결/동기화 상태
-  SyncState syncState    = SyncState.idle;
-  String?   displayPin;       // 서버 측: 화면에 보여줄 PIN
-  String?   connectingTo;     // 연결 중인 기기 이름
-  int       lastSyncCount = 0;
-  String?   syncError;
+  SyncState          syncState    = SyncState.idle;
+  String?            displayPin;       // 서버 측: 화면에 보여줄 PIN
+  String?            connectingTo;     // 연결 중인 기기 이름
+  int                lastSyncCount = 0;
+  String?            syncError;
+  List<SyncConflict> pendingConflicts = [];
 
   // PIN 입력 완료를 기다리는 Completer (클라이언트 측)
   Completer<String?>? _pinCompleter;
@@ -106,15 +108,18 @@ class SyncProvider extends ChangeNotifier {
       syncState    = SyncState.pinDisplay;
       notifyListeners();
     };
-    _server.onSyncDone = (count) {
-      displayPin    = null;
-      lastSyncCount = count;
-      syncState     = SyncState.done;
+    _server.onSyncDone = (count, conflicts) {
+      displayPin       = null;
+      lastSyncCount    = count;
+      pendingConflicts = conflicts;
+      syncState        = SyncState.done;
       notifyListeners();
       // 3초 후 idle 복귀
       Future.delayed(const Duration(seconds: 3), () {
-        syncState = SyncState.idle;
-        notifyListeners();
+        if (pendingConflicts.isEmpty) {
+          syncState = SyncState.idle;
+          notifyListeners();
+        }
       });
     };
     _server.onError = (msg) {
@@ -160,11 +165,10 @@ class SyncProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final count = await SyncClient.connect(
+      final result = await SyncClient.connect(
         ip:   device.ip,
-        port: SyncServer.port, // 항상 고정 포트 사용
+        port: SyncServer.port,
         onPinNeeded: () async {
-          // UI에 PIN 입력창 표시 요청
           _pinCompleter = Completer<String?>();
           syncState = SyncState.pinInput;
           notifyListeners();
@@ -172,13 +176,16 @@ class SyncProvider extends ChangeNotifier {
         },
       );
 
-      lastSyncCount = count;
-      syncState     = SyncState.done;
+      lastSyncCount    = result.changed;
+      pendingConflicts = result.conflicts;
+      syncState        = SyncState.done;
       notifyListeners();
 
       Future.delayed(const Duration(seconds: 3), () {
-        syncState = SyncState.idle;
-        notifyListeners();
+        if (pendingConflicts.isEmpty) {
+          syncState = SyncState.idle;
+          notifyListeners();
+        }
       });
     } catch (e) {
       syncError = e.toString();
@@ -199,6 +206,13 @@ class SyncProvider extends ChangeNotifier {
   void cancelPin() {
     _pinCompleter?.complete(null);
     _pinCompleter = null;
+    syncState = SyncState.idle;
+    notifyListeners();
+  }
+
+  /// 충돌 해결 완료 후 호출
+  void clearConflicts() {
+    pendingConflicts = [];
     syncState = SyncState.idle;
     notifyListeners();
   }

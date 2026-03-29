@@ -1,43 +1,71 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 
-/// 한 번 PIN 인증을 통과한 기기 ID 목록을 파일로 저장
+/// 신뢰 기기 목록과 기기별 세션 키를 파일로 저장
 class TrustedDevices {
-  static Set<String>? _ids;
+  static Map<String, String>? _data; // deviceId → keyHex
 
   static Future<bool> isTrusted(String deviceId) async {
-    final ids = await _load();
-    return ids.contains(deviceId);
+    final data = await _load();
+    return data.containsKey(deviceId);
   }
 
-  static Future<void> trust(String deviceId) async {
-    final ids = await _load();
-    if (ids.add(deviceId)) await _save(ids);
+  /// 기기를 신뢰 목록에 추가하고 세션 키를 저장
+  static Future<void> trust(String deviceId, Uint8List sessionKey) async {
+    final data = await _load();
+    data[deviceId] = _toHex(sessionKey);
+    await _save(data);
   }
 
-  static Future<Set<String>> _load() async {
-    if (_ids != null) return _ids!;
+  /// 저장된 세션 키 반환 (없으면 null)
+  static Future<Uint8List?> getKey(String deviceId) async {
+    final data = await _load();
+    final hex = data[deviceId];
+    if (hex == null) return null;
+    return _fromHex(hex);
+  }
+
+  static Future<Map<String, String>> _load() async {
+    if (_data != null) return _data!;
     try {
       final file = await _file();
       if (await file.exists()) {
-        final list = jsonDecode(await file.readAsString()) as List;
-        _ids = list.cast<String>().toSet();
-        return _ids!;
+        final raw = jsonDecode(await file.readAsString());
+        if (raw is Map) {
+          _data = Map<String, String>.from(raw);
+          return _data!;
+        }
+        // 이전 형식(List) 마이그레이션
+        if (raw is List) {
+          _data = {for (final id in raw) id as String: ''};
+          return _data!;
+        }
       }
     } catch (_) {}
-    _ids = {};
-    return _ids!;
+    _data = {};
+    return _data!;
   }
 
-  static Future<void> _save(Set<String> ids) async {
-    _ids = ids;
-    final file = await _file();
-    await file.writeAsString(jsonEncode(ids.toList()));
+  static Future<void> _save(Map<String, String> data) async {
+    _data = data;
+    await (await _file()).writeAsString(jsonEncode(data));
   }
 
   static Future<File> _file() async {
     final dir = await getApplicationDocumentsDirectory();
     return File('${dir.path}/.simnote_trusted.json');
+  }
+
+  static String _toHex(Uint8List bytes) =>
+      bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+  static Uint8List _fromHex(String hex) {
+    if (hex.isEmpty) return Uint8List(0);
+    return Uint8List.fromList([
+      for (var i = 0; i < hex.length; i += 2)
+        int.parse(hex.substring(i, i + 2), radix: 16)
+    ]);
   }
 }

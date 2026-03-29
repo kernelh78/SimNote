@@ -18,6 +18,10 @@ class Note {
 
   bool isFavorite = false;
 
+  bool isDeleted = false;
+
+  DateTime? deletedAt;
+
   DateTime createdAt = DateTime.now();
 
   DateTime updatedAt = DateTime.now();

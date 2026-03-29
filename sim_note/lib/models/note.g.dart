@@ -27,23 +27,33 @@ const NoteSchema = CollectionSchema(
       name: r'createdAt',
       type: IsarType.dateTime,
     ),
-    r'isFavorite': PropertySchema(
+    r'deletedAt': PropertySchema(
       id: 2,
+      name: r'deletedAt',
+      type: IsarType.dateTime,
+    ),
+    r'isDeleted': PropertySchema(
+      id: 3,
+      name: r'isDeleted',
+      type: IsarType.bool,
+    ),
+    r'isFavorite': PropertySchema(
+      id: 4,
       name: r'isFavorite',
       type: IsarType.bool,
     ),
     r'syncId': PropertySchema(
-      id: 3,
+      id: 5,
       name: r'syncId',
       type: IsarType.string,
     ),
     r'title': PropertySchema(
-      id: 4,
+      id: 6,
       name: r'title',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 5,
+      id: 7,
       name: r'updatedAt',
       type: IsarType.dateTime,
     )
@@ -114,10 +124,12 @@ void _noteSerialize(
 ) {
   writer.writeString(offsets[0], object.body);
   writer.writeDateTime(offsets[1], object.createdAt);
-  writer.writeBool(offsets[2], object.isFavorite);
-  writer.writeString(offsets[3], object.syncId);
-  writer.writeString(offsets[4], object.title);
-  writer.writeDateTime(offsets[5], object.updatedAt);
+  writer.writeDateTime(offsets[2], object.deletedAt);
+  writer.writeBool(offsets[3], object.isDeleted);
+  writer.writeBool(offsets[4], object.isFavorite);
+  writer.writeString(offsets[5], object.syncId);
+  writer.writeString(offsets[6], object.title);
+  writer.writeDateTime(offsets[7], object.updatedAt);
 }
 
 Note _noteDeserialize(
@@ -129,11 +141,13 @@ Note _noteDeserialize(
   final object = Note();
   object.body = reader.readString(offsets[0]);
   object.createdAt = reader.readDateTime(offsets[1]);
+  object.deletedAt = reader.readDateTimeOrNull(offsets[2]);
   object.id = id;
-  object.isFavorite = reader.readBool(offsets[2]);
-  object.syncId = reader.readStringOrNull(offsets[3]);
-  object.title = reader.readString(offsets[4]);
-  object.updatedAt = reader.readDateTime(offsets[5]);
+  object.isDeleted = reader.readBool(offsets[3]);
+  object.isFavorite = reader.readBool(offsets[4]);
+  object.syncId = reader.readStringOrNull(offsets[5]);
+  object.title = reader.readString(offsets[6]);
+  object.updatedAt = reader.readDateTime(offsets[7]);
   return object;
 }
 
@@ -149,12 +163,16 @@ P _noteDeserializeProp<P>(
     case 1:
       return (reader.readDateTime(offset)) as P;
     case 2:
-      return (reader.readBool(offset)) as P;
+      return (reader.readDateTimeOrNull(offset)) as P;
     case 3:
-      return (reader.readStringOrNull(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 4:
-      return (reader.readString(offset)) as P;
+      return (reader.readBool(offset)) as P;
     case 5:
+      return (reader.readStringOrNull(offset)) as P;
+    case 6:
+      return (reader.readString(offset)) as P;
+    case 7:
       return (reader.readDateTime(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -549,6 +567,75 @@ extension NoteQueryFilter on QueryBuilder<Note, Note, QFilterCondition> {
     });
   }
 
+  QueryBuilder<Note, Note, QAfterFilterCondition> deletedAtIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'deletedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterFilterCondition> deletedAtIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'deletedAt',
+      ));
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterFilterCondition> deletedAtEqualTo(
+      DateTime? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'deletedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterFilterCondition> deletedAtGreaterThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'deletedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterFilterCondition> deletedAtLessThan(
+    DateTime? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'deletedAt',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterFilterCondition> deletedAtBetween(
+    DateTime? lower,
+    DateTime? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'deletedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
   QueryBuilder<Note, Note, QAfterFilterCondition> idEqualTo(Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -597,6 +684,15 @@ extension NoteQueryFilter on QueryBuilder<Note, Note, QFilterCondition> {
         includeLower: includeLower,
         upper: upper,
         includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterFilterCondition> isDeletedEqualTo(bool value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'isDeleted',
+        value: value,
       ));
     });
   }
@@ -1034,6 +1130,30 @@ extension NoteQuerySortBy on QueryBuilder<Note, Note, QSortBy> {
     });
   }
 
+  QueryBuilder<Note, Note, QAfterSortBy> sortByDeletedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deletedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterSortBy> sortByDeletedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deletedAt', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterSortBy> sortByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterSortBy> sortByIsDeletedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.desc);
+    });
+  }
+
   QueryBuilder<Note, Note, QAfterSortBy> sortByIsFavorite() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'isFavorite', Sort.asc);
@@ -1108,6 +1228,18 @@ extension NoteQuerySortThenBy on QueryBuilder<Note, Note, QSortThenBy> {
     });
   }
 
+  QueryBuilder<Note, Note, QAfterSortBy> thenByDeletedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deletedAt', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterSortBy> thenByDeletedAtDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'deletedAt', Sort.desc);
+    });
+  }
+
   QueryBuilder<Note, Note, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -1117,6 +1249,18 @@ extension NoteQuerySortThenBy on QueryBuilder<Note, Note, QSortThenBy> {
   QueryBuilder<Note, Note, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterSortBy> thenByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.asc);
+    });
+  }
+
+  QueryBuilder<Note, Note, QAfterSortBy> thenByIsDeletedDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'isDeleted', Sort.desc);
     });
   }
 
@@ -1183,6 +1327,18 @@ extension NoteQueryWhereDistinct on QueryBuilder<Note, Note, QDistinct> {
     });
   }
 
+  QueryBuilder<Note, Note, QDistinct> distinctByDeletedAt() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'deletedAt');
+    });
+  }
+
+  QueryBuilder<Note, Note, QDistinct> distinctByIsDeleted() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'isDeleted');
+    });
+  }
+
   QueryBuilder<Note, Note, QDistinct> distinctByIsFavorite() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'isFavorite');
@@ -1226,6 +1382,18 @@ extension NoteQueryProperty on QueryBuilder<Note, Note, QQueryProperty> {
   QueryBuilder<Note, DateTime, QQueryOperations> createdAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'createdAt');
+    });
+  }
+
+  QueryBuilder<Note, DateTime?, QQueryOperations> deletedAtProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'deletedAt');
+    });
+  }
+
+  QueryBuilder<Note, bool, QQueryOperations> isDeletedProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'isDeleted');
     });
   }
 

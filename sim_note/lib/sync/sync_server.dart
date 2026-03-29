@@ -1,14 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+// dart:typed_data provided via flutter/foundation.dart
 import 'package:flutter/foundation.dart';
 import '../database/db_service.dart';
 import 'device_identity.dart';
+import 'sync_conflict.dart';
+import 'sync_crypto.dart';
 import 'sync_protocol.dart';
+import 'sync_state_store.dart';
 import 'trusted_devices.dart';
 
 typedef OnPinRequired = void Function(String pin, String clientName);
-typedef OnSyncDone    = void Function(int count);
+typedef OnSyncDone    = void Function(int count, List<SyncConflict> conflicts);
 typedef OnError       = void Function(String msg);
 
 class SyncServer {
@@ -41,7 +45,9 @@ class SyncServer {
     debugPrint('[SyncServer] 연결: ${client.remoteAddress.address}');
     final myId = await DeviceIdentity.getId();
     String? pendingPin;
+    String? pendingSalt;
     String? pendingClientId;
+    Uint8List? sessionKey;
 
     try {
       await for (final msg in receiveMsg(client)) {
@@ -55,33 +61,54 @@ class SyncServer {
             pendingClientId  = clientId;
 
             if (await TrustedDevices.isTrusted(clientId)) {
+              sessionKey = await TrustedDevices.getKey(clientId);
               sendMsg(client, {'type': kTrusted, 'deviceId': myId});
             } else {
-              pendingPin = _generatePin();
-              sendMsg(client, {'type': kPinRequired, 'deviceId': myId});
-              onPinRequired?.call(pendingPin!, clientName);
+              pendingPin  = _generatePin();
+              pendingSalt = SyncCrypto.randomSalt();
+              sendMsg(client, {
+                'type':     kPinRequired,
+                'deviceId': myId,
+                'salt':     pendingSalt,
+              });
+              onPinRequired?.call(pendingPin, clientName);
             }
 
           case kPin:
             final entered = msg['pin'] as String;
-            if (entered == pendingPin && pendingClientId != null) {
-              await TrustedDevices.trust(pendingClientId!);
+            if (entered == pendingPin &&
+                pendingSalt != null &&
+                pendingClientId != null) {
+              sessionKey = SyncCrypto.deriveKey(entered, pendingSalt);
+              await TrustedDevices.trust(pendingClientId, sessionKey);
               sendMsg(client, {'type': kPinOk});
             } else {
               sendMsg(client, {'type': kPinWrong});
             }
-            pendingPin = null;
+            pendingPin  = null;
+            pendingSalt = null;
 
-          case kSyncRequest:
-            final remote = (msg['notes'] as List).cast<Map<String, dynamic>>();
-            final changed = await DbService.mergeRemoteNotes(remote);
+          case kEncrypted:
+            if (sessionKey == null) {
+              sendMsg(client, {'type': kError, 'message': '세션 키 없음'});
+              break;
+            }
+            final inner = decryptMsg(msg, sessionKey);
+            final innerType = inner['type'] as String;
 
-            // 내 전체 노트를 응답으로 보냄
-            final myNotes = await DbService.getAllNotesForSync();
-            sendMsg(client, {'type': kSyncResult, 'notes': myNotes});
+            if (innerType == kSyncRequest) {
+              final remote =
+                  (inner['notes'] as List).cast<Map<String, dynamic>>();
+              final result = await DbService.mergeRemoteNotes(remote);
 
-            onSyncDone?.call(changed);
-            await client.close();
+              final myNotes = await DbService.getAllNotesForSync();
+              sendEncrypted(client,
+                  {'type': kSyncResult, 'notes': myNotes}, sessionKey);
+
+              await SyncStateStore.setLastSyncAt(DateTime.now());
+              onSyncDone?.call(result.changed, result.conflicts);
+              await client.close();
+            }
         }
       }
     } catch (e) {

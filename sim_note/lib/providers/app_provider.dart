@@ -144,12 +144,17 @@ class AppProvider extends ChangeNotifier {
     if (selectedNote?.id == noteId) {
       selectedNote = currentNotes.where((n) => n.id == noteId).firstOrNull;
     }
+    notifyListeners(); // selectedNote 업데이트 후 UI 갱신
   }
 
   Future<void> removeTagFromNote(Id noteId, Id tagId) async {
     await DbService.removeTagFromNote(noteId, tagId);
     allTags = await DbService.getAllTags();
     await _refreshCurrentList();
+    if (selectedNote?.id == noteId) {
+      selectedNote = currentNotes.where((n) => n.id == noteId).firstOrNull;
+    }
+    notifyListeners();
   }
 
   // ── 내부 헬퍼 ─────────────────────────────────────────────

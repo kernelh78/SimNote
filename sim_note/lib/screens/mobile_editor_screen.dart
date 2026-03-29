@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
-import '../models/tag.dart';
+import '../widgets/note_tag_row.dart';
 
 class MobileEditorScreen extends StatefulWidget {
   const MobileEditorScreen({super.key});
@@ -112,7 +112,7 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
           // 태그
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-            child: _TagRow(note: note, provider: provider),
+            child: NoteTagRow(note: note, provider: provider),
           ),
 
           const Divider(height: 20),
@@ -165,67 +165,6 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _TagRow extends StatelessWidget {
-  final Note note;
-  final AppProvider provider;
-
-  const _TagRow({required this.note, required this.provider});
-
-  @override
-  Widget build(BuildContext context) {
-    final controller = TextEditingController();
-
-    return FutureBuilder<List<Tag>>(
-      future: () async {
-        await note.tags.load();
-        return note.tags.toList();
-      }(),
-      builder: (context, snapshot) {
-        final tags = snapshot.data ?? [];
-
-        return Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            ...tags.map(
-              (tag) => Chip(
-                label: Text(
-                  '#${tag.name}',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: EdgeInsets.zero,
-                onDeleted: () => provider.removeTagFromNote(note.id, tag.id),
-              ),
-            ),
-            SizedBox(
-              width: 120,
-              child: TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  hintText: '태그 추가...',
-                  hintStyle: TextStyle(fontSize: 12),
-                  border: InputBorder.none,
-                  isDense: true,
-                ),
-                style: const TextStyle(fontSize: 12),
-                onSubmitted: (value) {
-                  final tag = value.replaceAll('#', '').trim();
-                  if (tag.isNotEmpty) {
-                    provider.addTagToNote(note.id, tag);
-                    controller.clear();
-                  }
-                },
-              ),
-            ),
-          ],
-        );
-      },
     );
   }
 }

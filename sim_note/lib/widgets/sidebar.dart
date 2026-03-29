@@ -33,34 +33,42 @@ class Sidebar extends StatelessWidget {
               onChanged: provider.search,
             ),
           ),
-          const SizedBox(height: 16),
-
-          // 즐겨찾기
-          _SidebarItem(
-            icon: Icons.star_outline,
-            label: '즐겨찾기',
-            isSelected: provider.sidebarMode == SidebarMode.favorites,
-            onTap: provider.selectFavorites,
-          ),
           const SizedBox(height: 8),
 
-          // 폴더 섹션
-          _SectionHeader(
-            label: '폴더',
-            onAdd: () => _showAddNotebookDialog(context, provider),
-          ),
-          ...provider.notebooks.map(
-            (nb) => _NotebookItem(nb: nb, provider: provider),
-          ),
-          const SizedBox(height: 8),
+          // 스크롤 가능한 목록
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 16),
+              children: [
+                // 즐겨찾기
+                _SidebarItem(
+                  icon: Icons.star_outline,
+                  label: '즐겨찾기',
+                  isSelected: provider.sidebarMode == SidebarMode.favorites,
+                  onTap: provider.selectFavorites,
+                ),
+                const SizedBox(height: 8),
 
-          // 태그 섹션
-          if (provider.allTags.isNotEmpty) ...[
-            const _SectionHeader(label: '태그'),
-            ...provider.allTags.map(
-              (tag) => _TagItem(tag: tag, provider: provider),
+                // 폴더 섹션
+                _SectionHeader(
+                  label: '폴더',
+                  onAdd: () => _showAddNotebookDialog(context, provider),
+                ),
+                ...provider.notebooks.map(
+                  (nb) => _NotebookItem(nb: nb, provider: provider),
+                ),
+                const SizedBox(height: 8),
+
+                // 태그 섹션
+                if (provider.allTags.isNotEmpty) ...[
+                  const _SectionHeader(label: '태그'),
+                  ...provider.allTags.map(
+                    (tag) => _TagItem(tag: tag, provider: provider),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );

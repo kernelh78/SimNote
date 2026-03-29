@@ -1,10 +1,14 @@
 import 'dart:async';
 import 'dart:io';
+// dart:typed_data provided via flutter/foundation.dart
 import 'package:flutter/foundation.dart';
 import '../database/db_service.dart';
 import 'device_identity.dart';
+import 'sync_conflict.dart';
+import 'sync_crypto.dart';
 import 'sync_protocol.dart';
 import 'sync_server.dart';
+import 'sync_state_store.dart';
 import 'trusted_devices.dart';
 
 enum ConnectResult { pinRequired, trusted, pinWrong, error }
@@ -12,12 +16,10 @@ enum ConnectResult { pinRequired, trusted, pinWrong, error }
 class SyncClient {
   static const Duration _timeout = Duration(seconds: 10);
 
-  /// 서버에 연결하고 인증 단계까지 처리
-  /// [onPinNeeded] : PIN 입력이 필요할 때 호출 — Future<String?>을 반환 (null이면 취소)
-  /// 반환값 : 동기화된 노트 수, 실패 시 예외 throw
-  static Future<int> connect({
+  /// 서버에 연결하고 인증 + 암호화 동기화까지 처리
+  static Future<({int changed, List<SyncConflict> conflicts})> connect({
     required String ip,
-    int port = SyncServer.port, // 항상 고정 포트 사용
+    int port = SyncServer.port,
     required Future<String?> Function() onPinNeeded,
   }) async {
     final myId   = await DeviceIdentity.getId();
@@ -25,10 +27,7 @@ class SyncClient {
 
     late Socket socket;
     try {
-      socket = await Socket.connect(
-        ip, port,
-        timeout: _timeout,
-      );
+      socket = await Socket.connect(ip, port, timeout: _timeout);
       debugPrint('[SyncClient] 연결 성공: $ip:$port');
     } catch (e) {
       throw '기기에 연결할 수 없습니다: $e';
@@ -45,13 +44,16 @@ class SyncClient {
       });
 
       // 2. 서버 응답 수신
-      final response = await incoming.first.timeout(_timeout);
+      final response     = await incoming.first.timeout(_timeout);
       final responseType = response['type'] as String;
-      final serverId = response['deviceId'] as String? ?? '';
+      final serverId     = response['deviceId'] as String? ?? '';
+
+      late Uint8List sessionKey;
 
       if (responseType == kPinRequired) {
-        // 3. PIN 입력 요청
-        final pin = await onPinNeeded();
+        // 3a. PIN 교환 + 세션 키 파생
+        final salt = response['salt'] as String? ?? '';
+        final pin  = await onPinNeeded();
         if (pin == null) throw '사용자가 취소했습니다';
 
         sendMsg(socket, {'type': kPin, 'pin': pin});
@@ -59,25 +61,38 @@ class SyncClient {
         final pinResult = await incoming.first.timeout(_timeout);
         if (pinResult['type'] != kPinOk) throw '잘못된 PIN입니다';
 
-        await TrustedDevices.trust(serverId);
-      } else if (responseType != kTrusted) {
+        sessionKey = SyncCrypto.deriveKey(pin, salt);
+        await TrustedDevices.trust(serverId, sessionKey);
+
+      } else if (responseType == kTrusted) {
+        // 3b. 기존 신뢰 기기 — 저장된 키 사용
+        final stored = await TrustedDevices.getKey(serverId);
+        if (stored == null || stored.isEmpty) {
+          throw '저장된 세션 키가 없습니다. 다시 PIN 인증이 필요합니다.';
+        }
+        sessionKey = stored;
+
+      } else {
         throw '알 수 없는 응답: $responseType';
       }
 
-      // 4. 동기화 요청
+      // 4. 동기화 요청 — 암호화 전송
       final myNotes = await DbService.getAllNotesForSync();
-      sendMsg(socket, {'type': kSyncRequest, 'notes': myNotes});
+      sendEncrypted(socket, {'type': kSyncRequest, 'notes': myNotes}, sessionKey);
 
-      // 5. 병합 결과 수신
-      final syncResult = await incoming.first.timeout(_timeout);
-      if (syncResult['type'] != kSyncResult) throw '동기화 응답 오류';
+      // 5. 암호화된 결과 수신 + 복호화
+      final envelope = await incoming.first.timeout(_timeout);
+      if (envelope['type'] != kEncrypted) throw '동기화 응답 오류';
 
-      final remoteNotes =
+      final syncResult   = decryptMsg(envelope, sessionKey);
+      final remoteNotes  =
           (syncResult['notes'] as List).cast<Map<String, dynamic>>();
-      final changed = await DbService.mergeRemoteNotes(remoteNotes);
+      final result = await DbService.mergeRemoteNotes(remoteNotes);
 
-      debugPrint('[SyncClient] 동기화 완료: $changed개 변경');
-      return changed;
+      await SyncStateStore.setLastSyncAt(DateTime.now());
+      debugPrint('[SyncClient] 동기화 완료: ${result.changed}개 변경, '
+          '${result.conflicts.length}개 충돌');
+      return result;
     } finally {
       socket.destroy();
     }

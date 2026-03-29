@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/sync_provider.dart';
+import '../sync/sync_log.dart';
 
 /// 안테나 아이콘 버튼 (탭 → 바텀시트)
 class SyncButton extends StatelessWidget {
@@ -73,38 +75,60 @@ class SyncButton extends StatelessWidget {
 
 // ── 동기화 패널 ─────────────────────────────────────────────
 
-class _SyncPanel extends StatelessWidget {
+class _SyncPanel extends StatefulWidget {
   const _SyncPanel();
+
+  @override
+  State<_SyncPanel> createState() => _SyncPanelState();
+}
+
+class _SyncPanelState extends State<_SyncPanel>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tab;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final sync = context.watch<SyncProvider>();
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-          20, 20, 20, MediaQuery.of(context).viewInsets.bottom + 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 헤더
-          Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 헤더
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 8, 0),
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('주변 기기',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const Text('동기화',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold)),
                   if (sync.localIp != null)
                     Text('내 IP: ${sync.localIp}',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[500])),
                 ],
               ),
               IconButton(
                 icon: sync.isDiscovering
                     ? const SizedBox(
-                        width: 20, height: 20,
+                        width: 20,
+                        height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2))
                     : const Icon(Icons.refresh),
                 onPressed: sync.refresh,
@@ -112,19 +136,54 @@ class _SyncPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+        ),
+        // 탭바
+        TabBar(
+          controller: _tab,
+          tabs: const [
+            Tab(text: '주변 기기'),
+            Tab(text: '동기화 로그'),
+          ],
+        ),
+        // 탭 내용
+        SizedBox(
+          height: 320 + bottom,
+          child: TabBarView(
+            controller: _tab,
+            children: [
+              _DevicesTab(sync: sync, bottomPad: bottom),
+              const _LogTab(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
 
-          // 동기화 상태 메시지
+// ── 기기 탭 ──────────────────────────────────────────────────
+
+class _DevicesTab extends StatelessWidget {
+  final SyncProvider sync;
+  final double bottomPad;
+
+  const _DevicesTab({required this.sync, required this.bottomPad});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, bottomPad + 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           _StatusBanner(sync: sync),
 
-          // 탐색 중
           if (sync.isDiscovering && sync.discoveredDevices.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
               child: Center(child: CircularProgressIndicator()),
             ),
 
-          // 기기 없음
           if (!sync.isDiscovering && sync.discoveredDevices.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 20),
@@ -135,11 +194,116 @@ class _SyncPanel extends StatelessWidget {
               ),
             ),
 
-          // 기기 목록
           ...sync.discoveredDevices.map(
             (device) => _DeviceTile(device: device, sync: sync),
           ),
+        ],
+      ),
+    );
+  }
+}
 
+// ── 로그 탭 ───────────────────────────────────────────────────
+
+class _LogTab extends StatefulWidget {
+  const _LogTab();
+
+  @override
+  State<_LogTab> createState() => _LogTabState();
+}
+
+class _LogTabState extends State<_LogTab> {
+  List<SyncLogEntry> _logs = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final logs = await SyncLog.load();
+    if (mounted) setState(() { _logs = logs; _loading = false; });
+  }
+
+  Future<void> _clear() async {
+    await SyncLog.clear();
+    if (mounted) setState(() => _logs = []);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return Column(
+      children: [
+        if (_logs.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _clear,
+              icon: const Icon(Icons.delete_outline, size: 16),
+              label: const Text('로그 지우기', style: TextStyle(fontSize: 12)),
+            ),
+          ),
+        Expanded(
+          child: _logs.isEmpty
+              ? Center(
+                  child: Text('동기화 기록이 없습니다',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+                  itemCount: _logs.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) => _LogTile(entry: _logs[i]),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+final _logDateFmt = DateFormat('MM/dd HH:mm');
+
+class _LogTile extends StatelessWidget {
+  final SyncLogEntry entry;
+  const _LogTile({required this.entry});
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (entry.action) {
+      SyncLogAction.added            => (Icons.add_circle_outline, Colors.green),
+      SyncLogAction.updated          => (Icons.edit_outlined, Colors.blue),
+      SyncLogAction.deleted          => (Icons.delete_outline, Colors.red),
+      SyncLogAction.tagChanged       => (Icons.tag, Colors.orange),
+      SyncLogAction.conflictResolved => (Icons.call_merge, Colors.purple),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(entry.noteTitle,
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+                Text(entry.actionLabel,
+                    style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+              ],
+            ),
+          ),
+          Text(_logDateFmt.format(entry.time),
+              style: TextStyle(fontSize: 11, color: Colors.grey[400])),
         ],
       ),
     );
