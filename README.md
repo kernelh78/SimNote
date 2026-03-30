@@ -11,3 +11,5 @@
 
 Markdown view 가능
 pdf 및 txt 변환 가능 update
+
+Testing iphone device..
