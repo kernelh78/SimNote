@@ -1,4 +1,5 @@
-**Wi-Fi 안에서 내 폰과 PC가 알아서 동기화되는 메모 앱. 데이터는 내 기기 밖으로 절대 안 나간다.**
+# Wi-Fi 안에서 내 폰과 PC가 알아서 동기화되는 메모 앱. 
+데이터는 내 기기 밖으로 절대 안 나간다.**
 
 
 업데이트 내용:
@@ -12,4 +13,10 @@
 Markdown view 가능
 pdf 및 txt 변환 가능 update
 
-Testing iphone device..
+# Windows Build Method 
+
+ - git pull
+
+ - flutter pub get
+
+ - flutter build windows --release
