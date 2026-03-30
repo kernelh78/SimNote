@@ -8,7 +8,7 @@
 
 ## 현재 상태
 
-**10단계 완료.** 맥 ↔ 안드로이드 암호화 동기화 + iOS 지원 + 마크다운 렌더링 + 노트 내보내기(PDF/텍스트) + PDF 버그 수정 + 자동 동기화 완료.
+**14단계 완료.** 맥 ↔ 안드로이드 ↔ iOS ↔ Windows 4개 플랫폼 지원. 암호화 동기화 + 자동 동기화 + 비승인 기기 차단 + 버그 수정 + 앱 아이콘 전 플랫폼 적용 완료.
 
 ---
 
@@ -82,7 +82,7 @@
 | iOS 빌드 설정 (Podfile, 최소 버전 14.0) | 완료 |
 | 로컬 네트워크 권한 (NSLocalNetworkUsageDescription) | 완료 |
 | Bonjour 서비스 등록 (NSBonjourServices) | 완료 |
-| iPhone 시뮬레이터 동작 확인 | 완료 |
+| iPhone 실기기 테스트 (iOS 18.7.7) | 완료 |
 
 ### 7단계 — 마크다운 렌더링 ✅
 
@@ -98,7 +98,7 @@
 
 | 기능 | 상태 |
 |------|------|
-| PDF 내보내기 (마크다운 → HTML → PDF, 한글 폰트 지원) | 완료 |
+| PDF 내보내기 (마크다운 → pw.Document, 한글 폰트 임베딩) | 완료 |
 | 텍스트(.md) 내보내기 (제목·날짜·폴더·태그 메타 포함) | 완료 |
 | 데스크탑: 툴바 공유 아이콘 팝업 | 완료 |
 | 모바일: ⋮ 팝업 메뉴에 내보내기 항목 추가 | 완료 |
@@ -120,10 +120,48 @@
 |------|------|
 | UDP 브로드캐스트에 deviceId 포함 (신뢰 기기 사전 확인) | 완료 |
 | 신뢰 기기 발견 즉시 자동 연결 (Presence-based) | 완료 |
+| IP 비교로 연결 주도권 결정 (레이스 컨디션 방지) | 완료 |
 | 60초 쿨다운 (같은 기기에 연속 연결 방지) | 완료 |
 | 자동 동기화 설정 영구 저장 (앱 재시작 후 유지) | 완료 |
 | 동기화 패널에 자동 동기화 토글 스위치 | 완료 |
 | 기기 목록에 신뢰 기기 "신뢰" 뱃지 표시 | 완료 |
+
+### 11단계 — 비승인 기기 차단 ✅
+
+| 기능 | 상태 |
+|------|------|
+| 처음 보는 기기 연결 시 허용/차단 다이얼로그 | 완료 |
+| 차단 목록 영구 저장 (.simnote_blocked.json) | 완료 |
+| 차단된 기기 즉시 거부 (kRejected 전송) | 완료 |
+| 클라이언트에서 거부 이유 구분 (blocked / busy / denied) | 완료 |
+| 동기화 패널 배너에 PIN 번호 직접 표시 | 완료 |
+| 오류 상태 3초 후 자동 idle 복귀 | 완료 |
+
+### 12단계 — 데이터 무결성 버그 수정 ✅
+
+| 기능 | 상태 |
+|------|------|
+| 메모 삭제 시 태그 링크 및 즐겨찾기 함께 해제 | 완료 |
+| 폴더 삭제 시 소속 메모 전체 연쇄 삭제 | 완료 |
+| 태그로 메모 조회 시 삭제된 메모 필터링 | 완료 |
+| 고아 태그(메모 없는 태그) 자동 삭제 | 완료 |
+| 앱 시작 시 기존 고아 태그 일괄 정리 | 완료 |
+
+### 13단계 — Windows 지원 ✅
+
+| 기능 | 상태 |
+|------|------|
+| Windows 빌드 환경 구성 (Flutter stable + Visual Studio) | 완료 |
+| Windows 실기기 빌드 및 실행 확인 | 완료 |
+| Windows 동기화 테스트 | 완료 |
+
+### 14단계 — 앱 아이콘 전 플랫폼 적용 ✅
+
+| 기능 | 상태 |
+|------|------|
+| macOS 앱 아이콘 (AppIcon.appiconset 전 해상도) | 완료 |
+| Windows 앱 아이콘 (app_icon.ico) | 완료 |
+| Android / iOS 기존 아이콘 유지 | 완료 |
 
 ---
 
@@ -137,18 +175,23 @@
 병합:       updatedAt 타임스탬프 비교 + 충돌 감지
 로컬 DB:    Isar (NoSQL, 오프라인 우선)
 상태관리:   Provider (AppProvider + SyncProvider)
-자동동기화: Presence-based (신뢰 기기 발견 즉시, 60초 쿨다운)
+자동동기화: Presence-based (신뢰 기기 발견 즉시, IP 비교로 주도권 결정)
 PDF:        pdf 패키지 직접 생성 (pw.Document + Noto Sans KR 임베딩)
+보안:       차단 목록(.simnote_blocked.json) + kRejected 프로토콜
 ```
 
-### 동기화 흐름 (5단계 기준)
+### 동기화 흐름
 
 ```
 [클라이언트]
     → TCP 연결 (8765)
     → Hello 전송 (deviceId 포함)
-    → 신뢰 기기: TrustedDevices에서 세션 키 로드
-      첫 연결: 서버가 salt 전달 → PIN 교환 → SHA-256(PIN:salt) 세션 키 파생 → 저장
+    → 서버: 차단 기기? → kRejected 즉시 종료
+    → 서버: 처음 보는 기기? → UI에서 허용/차단 선택
+            허용: PIN 흐름 진행
+            차단: kRejected + 차단 목록 저장
+    → 신뢰 기기: TrustedDevices에서 세션 키 로드 → kTrusted
+    → 첫 연결: salt 전달 → PIN 교환 → SHA-256(PIN:salt) 세션 키 파생 → 저장
     → 내 노트 전체를 AES-256 암호화해서 전송
     → 서버도 암호화해서 응답
     → 양쪽 복호화 후 병합
@@ -167,29 +210,29 @@ sim_note/lib/
 │   ├── notebook.dart
 │   └── tag.dart
 ├── database/
-│   └── db_service.dart      # mergeRemoteNotes(), resolveConflict(), _setTags()
+│   └── db_service.dart      # mergeRemoteNotes(), resolveConflict(), _pruneOrphanTags()
 ├── export/
-│   └── note_exporter.dart   # PDF / 텍스트 내보내기 (share_plus + printing)
+│   └── note_exporter.dart   # PDF(pw.Document) / 텍스트 내보내기
 ├── sync/
-│   ├── discovery_service.dart   # UDP 브로드캐스트 탐색
-│   ├── sync_server.dart         # TCP 서버, salt 생성, 암호화 응답
-│   ├── sync_client.dart         # TCP 클라이언트, salt 수신, 암호화 전송
-│   ├── sync_protocol.dart       # JSON-Lines + sendEncrypted/decryptMsg
+│   ├── discovery_service.dart   # UDP 브로드캐스트 탐색 (deviceId 포함)
+│   ├── sync_server.dart         # TCP 서버, 차단/미승인 기기 처리, isBusy 가드
+│   ├── sync_client.dart         # TCP 클라이언트, kRejected 처리
+│   ├── sync_protocol.dart       # JSON-Lines + kRejected 포함 메시지 타입
 │   ├── sync_crypto.dart         # AES-256-CBC, SHA-256 키 파생
-│   ├── sync_state_store.dart    # 마지막 동기화 시각 저장
+│   ├── sync_state_store.dart    # 마지막 동기화 시각 + autoSync 설정 저장
 │   ├── sync_conflict.dart       # 충돌 데이터 모델
 │   ├── sync_log.dart            # 동기화 로그 (최대 200건)
-│   ├── trusted_devices.dart     # 기기별 세션 키 저장
+│   ├── trusted_devices.dart     # 기기별 세션 키 + 차단 목록 저장
 │   └── device_identity.dart     # 기기 고유 UUID
 ├── providers/
 │   ├── app_provider.dart        # 노트/폴더/태그 상태 관리
-│   └── sync_provider.dart       # 동기화 상태, 자동동기화, PIN Completer
+│   └── sync_provider.dart       # 동기화 상태, 자동동기화, 차단 처리, PIN Completer
 ├── screens/
-│   ├── home_screen.dart         # PIN 다이얼로그, 충돌 처리, 갱신
+│   ├── home_screen.dart         # PIN/충돌/미승인기기 다이얼로그
 │   └── mobile_editor_screen.dart
 └── widgets/
-    ├── sync_panel.dart          # 안테나 버튼, 기기 목록, 자동동기화 토글, 로그 탭
-    ├── note_tag_row.dart        # 태그 입력/표시 (Mac + Android 공용)
+    ├── sync_panel.dart          # 안테나 버튼, 기기 목록, 자동동기화 토글, PIN 배너, 로그 탭
+    ├── note_tag_row.dart        # 태그 입력/표시 (전 플랫폼 공용)
     ├── conflict_dialog.dart     # 충돌 해결 UI
     ├── sidebar.dart
     ├── note_list.dart
@@ -221,21 +264,27 @@ sim_note/lib/
 | PIN 확인 버튼 항상 비활성화 | TextField onChanged에서 setState 미호출 | onChanged: (_) => setState(() {}) 추가 |
 | 그래픽 오버플로우 (드로어 52px) | Column 안에 Expanded ListView 구조 오류 | SafeArea(child: ListView(...)) 최상위 구조로 교체 |
 | 그래픽 오버플로우 (에디터 키보드 122px) | TextField expands:true + SingleChildScrollView 충돌 | maxLines:null + viewInsets.bottom 패딩으로 교체 |
-| 암호화 후 기존 페어링 동기화 불가 | 구버전 페어링의 세션 키가 빈 문자열로 저장됨 → 서버가 kTrusted 전송 시 복호화 불가 | 서버에서 키 유효성 검사 후 빈 키면 PIN 재인증 강제 |
-| 맥 업데이트 후 동기화 여전히 실패 | 신버전 앱 설치 후 구버전 프로세스가 계속 실행 중 | 구 프로세스 종료 후 신버전 실행 |
-| PDF 한글 폰트 깨짐 방지 | pdf 패키지의 내장 폰트는 한글 미지원 | Printing.convertHtml() 사용 → WebKit 렌더러가 시스템 폰트로 처리 |
-| macOS PDF 내보내기 실패 ("Unable to create PDF: An unknown error occurred") | Printing.convertHtml()이 내부적으로 WKWebView를 사용하는데 macOS 샌드박스가 차단 | pdf 패키지의 pw.Document로 직접 생성 + PdfGoogleFonts.notoSansKR 임베딩으로 교체 |
-| PDF 내보내기 실패 (PathNotFoundException) | macOS 샌드박스 컨테이너 내 임시 디렉토리(Caches/com.simnote.simNote/) 미생성 | 파일 쓰기 전 Directory.create(recursive: true) 호출 |
+| 암호화 후 기존 페어링 동기화 불가 | 구버전 페어링의 세션 키가 빈 문자열로 저장됨 | 서버에서 키 유효성 검사 후 빈 키면 PIN 재인증 강제 |
+| macOS PDF 내보내기 실패 | Printing.convertHtml()이 macOS 샌드박스에서 WKWebView 차단 | pw.Document 직접 생성 + PdfGoogleFonts.notoSansKR 임베딩 |
+| PDF PathNotFoundException | macOS 컨테이너 내 임시 디렉토리 미생성 | 파일 쓰기 전 Directory.create(recursive: true) 호출 |
+| 메모 삭제 후 태그/즐겨찾기 잔존 | deleteNote가 소프트 삭제만 처리, 링크 해제 없음 | tags.clear() + isFavorite=false 함께 처리 |
+| 폴더 삭제 후 메모 잔존 | deleteNotebook이 노트북 레코드만 삭제 | 소속 노트 전체 deleteNote() 순회 후 삭제 |
+| 고아 태그 UI에 남음 | 버그로 인해 메모 없는 태그가 DB에 잔류 | 앱 시작 시 _pruneOrphanTags() 일괄 실행 |
+| iOS ↔ 맥 동시 연결 충돌 | 양쪽이 동시에 클라이언트로 연결 시도 | isBusy 가드 + kRejected(busy) + IP 비교로 연결 주도권 결정 |
+| 허용 후 PIN 미표시 | allowUnknownDevice()가 syncState를 idle로 바꿔 pinDisplay 리스너 타이밍 누락 | syncState 전환 제거, onPinRequired가 직접 pinDisplay로 전환 |
+| macOS/Windows 앱 아이콘 미적용 | pubspec.yaml에 macos/windows 항목 누락 | flutter_launcher_icons 설정에 macos/windows 블록 추가 |
 
 ---
 
 ## 향후 진행 사항
 
 - [x] 자동 동기화 (신뢰 기기 발견 시 자동 실행)
-- [ ] iOS 실기기 배포 (애플 개발자 계정 필요)
-- [ ] Windows 지원
-- [ ] 비승인 기기 접근 차단 및 알림
+- [x] 비승인 기기 접근 차단 및 알림
+- [x] Windows 지원
+- [x] iOS 실기기 테스트
+- [ ] 차단 기기 목록 관리 UI (차단 해제 기능)
 - [ ] 맥 Save As 다이얼로그 (내보내기 위치 직접 선택)
+- [ ] iOS App Store / 맥 App Store 배포 (애플 개발자 계정 필요)
 
 ---
 
@@ -243,8 +292,9 @@ sim_note/lib/
 
 | 항목 | 내용 |
 |------|------|
-| 맥 | macOS (Apple Silicon) |
-| 안드로이드 | Samsung Galaxy |
+| 맥 | macOS 26.4 (Apple Silicon) |
+| 안드로이드 | Samsung Galaxy S25+ (Android 16) |
+| iOS | kerne의 iPhone (iOS 18.7.7) |
+| Windows | Windows 11 |
 | 공유기 | TP-Link AX1500 |
-| iOS | iPhone 17 Pro 시뮬레이터 |
-| 테스트 내용 | 양방향 동기화, 마크다운 미리보기, PDF/텍스트 내보내기 |
+| 테스트 내용 | 4개 플랫폼 양방향 동기화, 비승인 기기 차단, 자동 동기화, 마크다운 미리보기, PDF/텍스트 내보내기 |
