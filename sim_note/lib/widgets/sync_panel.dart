@@ -372,8 +372,40 @@ class _StatusBanner extends StatelessWidget {
         return _banner(context, Colors.blue.shade50,
             '${sync.connectingTo}에 연결 중...', Icons.sync);
       case SyncState.pinDisplay:
-        return _banner(context, Colors.orange.shade50,
-            '${sync.connectingTo}이(가) 연결을 요청했습니다', Icons.lock_outline);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _banner(context, Colors.orange.shade50,
+                '${sync.connectingTo ?? "기기"}이(가) 연결을 요청했습니다', Icons.lock_outline),
+            if (sync.displayPin != null)
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  sync.displayPin!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 14,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                '상대 기기에 이 PIN을 입력하세요',
+                style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+              ),
+            ),
+          ],
+        );
       case SyncState.pinInput:
         return _banner(context, Colors.orange.shade50,
             '상대 기기 화면의 PIN을 입력하세요', Icons.lock_outline);

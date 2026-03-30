@@ -74,6 +74,15 @@ class SyncClient {
         }
         sessionKey = stored;
 
+      } else if (responseType == kRejected) {
+        final reason = response['reason'] as String? ?? '';
+        if (reason == 'blocked') {
+          throw '상대 기기에서 이 기기를 차단했습니다';
+        } else if (reason == 'busy') {
+          throw '상대 기기가 다른 기기와 동기화 중입니다. 잠시 후 다시 시도해주세요';
+        } else {
+          throw '상대 기기에서 연결을 거부했습니다';
+        }
       } else {
         throw '알 수 없는 응답: $responseType';
       }

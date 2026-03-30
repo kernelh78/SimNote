@@ -28,6 +28,7 @@ const kSyncRequest  = 'sync_request';
 const kSyncResult   = 'sync_result';
 const kEncrypted    = 'encrypted';
 const kError        = 'error';
+const kRejected     = 'rejected';
 
 // ── JSON-Lines 송수신 헬퍼 ──────────────────────────────────
 

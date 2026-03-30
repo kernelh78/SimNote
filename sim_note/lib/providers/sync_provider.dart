@@ -5,6 +5,7 @@ import '../sync/sync_client.dart';
 import '../sync/sync_conflict.dart';
 import '../sync/sync_server.dart';
 import '../sync/sync_state_store.dart';
+import '../sync/sync_server.dart' show OnUnknownDevice;
 import '../sync/trusted_devices.dart';
 
 class DiscoveredDevice {
@@ -43,7 +44,7 @@ class DiscoveredDevice {
 }
 
 // ── 연결 / 동기화 상태 ──────────────────────────────────────
-enum SyncState { idle, connecting, pinDisplay, pinInput, syncing, done, error }
+enum SyncState { idle, connecting, pinDisplay, pinInput, syncing, done, error, unknownDevice }
 
 class SyncProvider extends ChangeNotifier {
   final _discovery = DiscoveryService();
@@ -68,8 +69,14 @@ class SyncProvider extends ChangeNotifier {
   DateTime? _lastAutoSync;
   static const _autoSyncCooldown = Duration(seconds: 60);
 
+  // 알 수 없는 기기 정보 (unknownDevice 상태일 때)
+  String? unknownDeviceId;
+  String? unknownDeviceName;
+
   // PIN 입력 완료를 기다리는 Completer (클라이언트 측)
   Completer<String?>? _pinCompleter;
+  // 알 수 없는 기기 허용/차단 응답을 기다리는 Completer
+  Completer<bool>? _unknownDeviceCompleter;
 
   StreamSubscription<DiscoveryMessage>? _discoverySub;
   Timer? _cleanupTimer;
@@ -114,6 +121,15 @@ class SyncProvider extends ChangeNotifier {
   }
 
   Future<void> _startServer() async {
+    _server.isBusy = () => syncState != SyncState.idle;
+    _server.onUnknownDevice = (deviceId, deviceName) async {
+      _unknownDeviceCompleter = Completer<bool>();
+      unknownDeviceId   = deviceId;
+      unknownDeviceName = deviceName;
+      syncState         = SyncState.unknownDevice;
+      notifyListeners();
+      return _unknownDeviceCompleter!.future;
+    };
     _server.onPinRequired = (pin, clientName) {
       displayPin   = pin;
       connectingTo = clientName;
@@ -138,6 +154,13 @@ class SyncProvider extends ChangeNotifier {
       syncError  = msg;
       syncState  = SyncState.error;
       notifyListeners();
+      Future.delayed(const Duration(seconds: 3), () {
+        if (syncState == SyncState.error) {
+          syncState = SyncState.idle;
+          syncError = null;
+          notifyListeners();
+        }
+      });
     };
     await _server.start();
   }
@@ -171,8 +194,9 @@ class SyncProvider extends ChangeNotifier {
     discoveredDevices = [...discoveredDevices, device];
     notifyListeners();
 
-    // 자동 동기화 트리거
-    if (autoSyncEnabled && trusted && syncState == SyncState.idle) {
+    // 자동 동기화 트리거 — 높은 IP 기기가 클라이언트로 연결 (레이스 컨디션 방지)
+    if (autoSyncEnabled && trusted && syncState == SyncState.idle &&
+        _isInitiator(device.ip)) {
       final now = DateTime.now();
       if (_lastAutoSync == null ||
           now.difference(_lastAutoSync!) > _autoSyncCooldown) {
@@ -220,7 +244,54 @@ class SyncProvider extends ChangeNotifier {
       syncError = e.toString();
       syncState = SyncState.error;
       notifyListeners();
+      Future.delayed(const Duration(seconds: 3), () {
+        if (syncState == SyncState.error) {
+          syncState = SyncState.idle;
+          syncError = null;
+          notifyListeners();
+        }
+      });
     }
+  }
+
+  /// 내 IP가 상대 IP보다 높으면 내가 클라이언트(먼저 연결)로 동작
+  /// → 양쪽이 동시에 연결을 시도하는 레이스 컨디션 방지
+  bool _isInitiator(String remoteIp) {
+    if (localIp == null) return true;
+    return localIp!.compareTo(remoteIp) > 0;
+  }
+
+  // ── 알 수 없는 기기 허용 / 차단 ───────────────────────────
+
+  /// 알 수 없는 기기 허용 → PIN 흐름으로 진행
+  void allowUnknownDevice() {
+    unknownDeviceId   = null;
+    unknownDeviceName = null;
+    // syncState는 idle로 바꾸지 않음 — onPinRequired가 pinDisplay로 직접 전환
+    // idle → pinDisplay 사이에 리스너가 _prevState를 잘못 추적하는 문제 방지
+    _unknownDeviceCompleter?.complete(true);
+    _unknownDeviceCompleter = null;
+    notifyListeners();
+  }
+
+  /// 알 수 없는 기기 차단 → 차단 목록에 저장 + 연결 거부
+  Future<void> blockUnknownDevice() async {
+    final id = unknownDeviceId;
+    if (id != null) {
+      await TrustedDevices.block(id);
+    }
+    unknownDeviceId   = null;
+    unknownDeviceName = null;
+    syncState         = SyncState.idle;
+    _unknownDeviceCompleter?.complete(false);
+    _unknownDeviceCompleter = null;
+    notifyListeners();
+  }
+
+  /// 차단된 기기 해제
+  Future<void> unblockDevice(String deviceId) async {
+    await TrustedDevices.unblock(deviceId);
+    notifyListeners();
   }
 
   // ── 자동 동기화 토글 ───────────────────────────────────────

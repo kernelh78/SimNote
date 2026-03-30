@@ -5,11 +5,62 @@ import 'package:path_provider/path_provider.dart';
 
 /// 신뢰 기기 목록과 기기별 세션 키를 파일로 저장
 class TrustedDevices {
-  static Map<String, String>? _data; // deviceId → keyHex
+  static Map<String, String>? _data;     // deviceId → keyHex
+  static Set<String>?          _blocked; // 차단된 deviceId 목록
 
   static Future<bool> isTrusted(String deviceId) async {
     final data = await _load();
     return data.containsKey(deviceId);
+  }
+
+  // ── 차단 목록 ────────────────────────────────────────────
+
+  static Future<bool> isBlocked(String deviceId) async {
+    final blocked = await _loadBlocked();
+    return blocked.contains(deviceId);
+  }
+
+  static Future<void> block(String deviceId) async {
+    final blocked = await _loadBlocked();
+    blocked.add(deviceId);
+    await _saveBlocked(blocked);
+  }
+
+  static Future<void> unblock(String deviceId) async {
+    final blocked = await _loadBlocked();
+    blocked.remove(deviceId);
+    await _saveBlocked(blocked);
+  }
+
+  static Future<List<String>> getBlockedIds() async {
+    final blocked = await _loadBlocked();
+    return blocked.toList();
+  }
+
+  static Future<Set<String>> _loadBlocked() async {
+    if (_blocked != null) return _blocked!;
+    try {
+      final file = await _blockedFile();
+      if (await file.exists()) {
+        final raw = jsonDecode(await file.readAsString());
+        if (raw is List) {
+          _blocked = Set<String>.from(raw.cast<String>());
+          return _blocked!;
+        }
+      }
+    } catch (_) {}
+    _blocked = {};
+    return _blocked!;
+  }
+
+  static Future<void> _saveBlocked(Set<String> blocked) async {
+    _blocked = blocked;
+    await (await _blockedFile()).writeAsString(jsonEncode(blocked.toList()));
+  }
+
+  static Future<File> _blockedFile() async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/.simnote_blocked.json');
   }
 
   /// 기기를 신뢰 목록에 추가하고 세션 키를 저장

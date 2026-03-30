@@ -37,6 +37,12 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onSyncStateChanged() {
     final sync = context.read<SyncProvider>();
 
+    // 알 수 없는 기기 연결 시도 다이얼로그
+    if (sync.syncState == SyncState.unknownDevice &&
+        _prevState != SyncState.unknownDevice) {
+      _showUnknownDeviceDialog(sync);
+    }
+
     // 서버 측: PIN 표시 다이얼로그
     if (sync.syncState == SyncState.pinDisplay &&
         _prevState != SyncState.pinDisplay) {
@@ -77,6 +83,17 @@ class _HomeScreenState extends State<HomeScreen> {
       context.read<AppProvider>().load();
       sync.clearConflicts();
     }
+  }
+
+  void _showUnknownDeviceDialog(SyncProvider sync) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => ChangeNotifierProvider.value(
+        value: sync,
+        child: const _UnknownDeviceDialog(),
+      ),
+    );
   }
 
   void _showPinDisplayDialog(SyncProvider sync) {
@@ -120,6 +137,94 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         return const MobileLayout();
       },
+    );
+  }
+}
+
+// ── 알 수 없는 기기 다이얼로그 ──────────────────────────────
+
+class _UnknownDeviceDialog extends StatelessWidget {
+  const _UnknownDeviceDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = context.watch<SyncProvider>();
+
+    // 상태 변경 시 자동 닫기
+    if (sync.syncState != SyncState.unknownDevice) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted && Navigator.canPop(context)) {
+          Navigator.pop(context);
+        }
+      });
+    }
+
+    final name = sync.unknownDeviceName ?? '알 수 없는 기기';
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('연결 요청'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          RichText(
+            text: TextSpan(
+              style: DefaultTextStyle.of(context).style.copyWith(fontSize: 14),
+              children: [
+                const TextSpan(text: '처음 보는 기기 '),
+                TextSpan(
+                  text: name,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const TextSpan(text: '이(가) 동기화를 요청했습니다.'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, size: 16, color: Colors.orange),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '허용하면 PIN 인증 후 동기화됩니다.\n차단하면 이 기기는 앞으로 연결할 수 없습니다.',
+                    style: TextStyle(fontSize: 12, color: Colors.orange),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context);
+            sync.blockUnknownDevice();
+          },
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          child: const Text('차단'),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(context);
+            sync.allowUnknownDevice();
+          },
+          child: const Text('허용'),
+        ),
+      ],
     );
   }
 }

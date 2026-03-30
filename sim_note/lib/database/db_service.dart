@@ -31,6 +31,8 @@ class DbService {
         directory: dir.path,
       );
     }
+    // 이전 버그로 남은 고아 태그 정리
+    await _pruneOrphanTags();
   }
 
   static Isar get isar => _isar;
@@ -68,6 +70,14 @@ class DbService {
   }
 
   static Future<void> deleteNotebook(Id id) async {
+    // 소속 메모 전체 소프트 삭제 (태그/즐겨찾기 해제 포함)
+    final nb = await _isar.notebooks.get(id);
+    if (nb != null) {
+      await nb.notes.load();
+      for (final note in nb.notes) {
+        await deleteNote(note.id);
+      }
+    }
     await _isar.writeTxn(() async {
       await _isar.notebooks.delete(id);
     });
@@ -158,14 +168,37 @@ class DbService {
   }
 
   static Future<void> deleteNote(Id id) async {
+    final note = await _isar.notes.get(id);
+    if (note == null) return;
+    await note.tags.load();
+
+    // 태그 링크 해제 + 즐겨찾기 해제 + 소프트 삭제
     await _isar.writeTxn(() async {
-      final note = await _isar.notes.get(id);
-      if (note != null) {
-        note.isDeleted = true;
-        note.deletedAt = DateTime.now();
-        note.updatedAt = DateTime.now();
-        await _isar.notes.put(note);
-      }
+      note.isDeleted  = true;
+      note.deletedAt  = DateTime.now();
+      note.updatedAt  = DateTime.now();
+      note.isFavorite = false;
+      note.tags.clear();
+      await note.tags.save();
+      await _isar.notes.put(note);
+    });
+
+    // 연결된 메모가 없는 태그 자동 삭제
+    await _pruneOrphanTags();
+  }
+
+  /// 어떤 메모에도 연결되지 않은 태그를 DB에서 삭제
+  static Future<void> _pruneOrphanTags() async {
+    final tags = await _isar.tags.where().findAll();
+    final orphanIds = <Id>[];
+    for (final tag in tags) {
+      await tag.notes.load();
+      final hasActiveNote = tag.notes.any((n) => !n.isDeleted);
+      if (!hasActiveNote) orphanIds.add(tag.id);
+    }
+    if (orphanIds.isEmpty) return;
+    await _isar.writeTxn(() async {
+      await _isar.tags.deleteAll(orphanIds);
     });
   }
 
@@ -179,7 +212,7 @@ class DbService {
     final tag = await _isar.tags.get(tagId);
     if (tag == null) return [];
     await tag.notes.load();
-    return tag.notes.toList();
+    return tag.notes.where((n) => !n.isDeleted).toList();
   }
 
   static Future<void> addTagToNote(Id noteId, String tagName) async {
