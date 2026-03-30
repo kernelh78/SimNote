@@ -8,3 +8,6 @@
 트러블슈팅: 오버플로우 2건, 암호화 페어링 버그, 맥 프로세스 미교체, PDF 한글 처리 추가
 파일 구조: export/note_exporter.dart 반영
 향후 계획: 완료된 항목 제거, 남은 것만 정리
+
+Markdown view 가능
+pdf 및 txt 변환 가능 update
