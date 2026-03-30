@@ -4,25 +4,31 @@ import '../sync/discovery_service.dart';
 import '../sync/sync_client.dart';
 import '../sync/sync_conflict.dart';
 import '../sync/sync_server.dart';
+import '../sync/sync_state_store.dart';
+import '../sync/trusted_devices.dart';
 
 class DiscoveredDevice {
   final String name;
   final String ip;
   final String platform;
-  final int port;
+  final int    port;
+  final String deviceId;
   final DateTime lastSeen;
+  final bool isTrusted;
 
   const DiscoveredDevice({
     required this.name,
     required this.ip,
     required this.platform,
     required this.port,
+    required this.deviceId,
     required this.lastSeen,
+    this.isTrusted = false,
   });
 
   DiscoveredDevice refreshed() => DiscoveredDevice(
         name: name, ip: ip, platform: platform, port: port,
-        lastSeen: DateTime.now(),
+        deviceId: deviceId, lastSeen: DateTime.now(), isTrusted: isTrusted,
       );
 
   String get platformLabel {
@@ -51,11 +57,16 @@ class SyncProvider extends ChangeNotifier {
 
   // 연결/동기화 상태
   SyncState          syncState    = SyncState.idle;
-  String?            displayPin;       // 서버 측: 화면에 보여줄 PIN
-  String?            connectingTo;     // 연결 중인 기기 이름
+  String?            displayPin;
+  String?            connectingTo;
   int                lastSyncCount = 0;
   String?            syncError;
   List<SyncConflict> pendingConflicts = [];
+
+  // 자동 동기화
+  bool      autoSyncEnabled = false;
+  DateTime? _lastAutoSync;
+  static const _autoSyncCooldown = Duration(seconds: 60);
 
   // PIN 입력 완료를 기다리는 Completer (클라이언트 측)
   Completer<String?>? _pinCompleter;
@@ -66,6 +77,7 @@ class SyncProvider extends ChangeNotifier {
   // ── 초기화 ─────────────────────────────────────────────────
 
   Future<void> start() async {
+    autoSyncEnabled = await SyncStateStore.getAutoSync();
     await _startDiscovery();
     await _startServer();
   }
@@ -114,7 +126,6 @@ class SyncProvider extends ChangeNotifier {
       pendingConflicts = conflicts;
       syncState        = SyncState.done;
       notifyListeners();
-      // 3초 후 idle 복귀
       Future.delayed(const Duration(seconds: 3), () {
         if (pendingConflicts.isEmpty) {
           syncState = SyncState.idle;
@@ -133,24 +144,42 @@ class SyncProvider extends ChangeNotifier {
 
   // ── 탐색 이벤트 ────────────────────────────────────────────
 
-  void _onDiscoveryMessage(DiscoveryMessage msg) {
+  void _onDiscoveryMessage(DiscoveryMessage msg) async {
     final idx = discoveredDevices.indexWhere((d) => d.ip == msg.ip);
     if (idx >= 0) {
       final updated = List<DiscoveredDevice>.from(discoveredDevices);
       updated[idx] = updated[idx].refreshed();
       discoveredDevices = updated;
-    } else {
-      discoveredDevices = [
-        ...discoveredDevices,
-        DiscoveredDevice(
-          name:     msg.name,
-          ip:       msg.ip,
-          platform: msg.platform,
-          port:     msg.port,
-          lastSeen: DateTime.now(),
-        ),
-      ];
-      notifyListeners();
+      // 목록 갱신 없이 lastSeen만 업데이트 (UI 깜빡임 방지)
+      return;
+    }
+
+    // 새 기기 발견 — 신뢰 여부 확인
+    final trusted = msg.deviceId.isNotEmpty
+        ? await TrustedDevices.isTrusted(msg.deviceId)
+        : false;
+
+    final device = DiscoveredDevice(
+      name:      msg.name,
+      ip:        msg.ip,
+      platform:  msg.platform,
+      port:      msg.port,
+      deviceId:  msg.deviceId,
+      lastSeen:  DateTime.now(),
+      isTrusted: trusted,
+    );
+    discoveredDevices = [...discoveredDevices, device];
+    notifyListeners();
+
+    // 자동 동기화 트리거
+    if (autoSyncEnabled && trusted && syncState == SyncState.idle) {
+      final now = DateTime.now();
+      if (_lastAutoSync == null ||
+          now.difference(_lastAutoSync!) > _autoSyncCooldown) {
+        _lastAutoSync = now;
+        debugPrint('[AutoSync] 신뢰 기기 발견 → 자동 동기화: ${device.name}');
+        Future.delayed(const Duration(seconds: 1), () => connectTo(device));
+      }
     }
   }
 
@@ -192,6 +221,14 @@ class SyncProvider extends ChangeNotifier {
       syncState = SyncState.error;
       notifyListeners();
     }
+  }
+
+  // ── 자동 동기화 토글 ───────────────────────────────────────
+
+  Future<void> toggleAutoSync() async {
+    autoSyncEnabled = !autoSyncEnabled;
+    await SyncStateStore.setAutoSync(autoSyncEnabled);
+    notifyListeners();
   }
 
   /// 사용자가 PIN을 입력했을 때 호출

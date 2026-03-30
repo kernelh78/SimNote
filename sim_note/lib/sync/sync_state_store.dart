@@ -13,22 +13,41 @@ class SyncStateStore {
     return _file!;
   }
 
-  static Future<DateTime?> getLastSyncAt() async {
+  static Future<Map<String, dynamic>> _read() async {
     try {
       final file = await _getFile();
-      if (!await file.exists()) return null;
-      final data = jsonDecode(await file.readAsString());
-      final ts = data['lastSyncAt'] as String?;
-      return ts != null ? DateTime.parse(ts) : null;
+      if (!await file.exists()) return {};
+      return jsonDecode(await file.readAsString()) as Map<String, dynamic>;
     } catch (_) {
-      return null;
+      return {};
     }
   }
 
-  static Future<void> setLastSyncAt(DateTime time) async {
+  static Future<void> _write(Map<String, dynamic> data) async {
     final file = await _getFile();
-    await file.writeAsString(
-      jsonEncode({'lastSyncAt': time.toUtc().toIso8601String()}),
-    );
+    await file.writeAsString(jsonEncode(data));
+  }
+
+  static Future<DateTime?> getLastSyncAt() async {
+    final data = await _read();
+    final ts = data['lastSyncAt'] as String?;
+    return ts != null ? DateTime.parse(ts) : null;
+  }
+
+  static Future<void> setLastSyncAt(DateTime time) async {
+    final data = await _read();
+    data['lastSyncAt'] = time.toUtc().toIso8601String();
+    await _write(data);
+  }
+
+  static Future<bool> getAutoSync() async {
+    final data = await _read();
+    return data['autoSync'] as bool? ?? false;
+  }
+
+  static Future<void> setAutoSync(bool enabled) async {
+    final data = await _read();
+    data['autoSync'] = enabled;
+    await _write(data);
   }
 }

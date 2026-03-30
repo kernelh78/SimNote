@@ -137,6 +137,8 @@ class _SyncPanelState extends State<_SyncPanel>
             ],
           ),
         ),
+        // 자동 동기화 토글
+        _AutoSyncToggle(sync: sync),
         // 탭바
         TabBar(
           controller: _tab,
@@ -157,6 +159,53 @@ class _SyncPanelState extends State<_SyncPanel>
           ),
         ),
       ],
+    );
+  }
+}
+
+// ── 자동 동기화 토글 ─────────────────────────────────────────
+
+class _AutoSyncToggle extends StatelessWidget {
+  final SyncProvider sync;
+  const _AutoSyncToggle({required this.sync});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            sync.autoSyncEnabled
+                ? Icons.sync_outlined
+                : Icons.sync_disabled_outlined,
+            size: 18,
+            color: sync.autoSyncEnabled
+                ? Theme.of(context).colorScheme.primary
+                : Colors.grey,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('자동 동기화',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(
+                  sync.autoSyncEnabled
+                      ? '신뢰 기기 발견 시 자동으로 동기화합니다'
+                      : '켜면 신뢰 기기가 발견될 때 자동으로 동기화합니다',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: sync.autoSyncEnabled,
+            onChanged: (_) => sync.toggleAutoSync(),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -386,8 +435,27 @@ class _DeviceTile extends StatelessWidget {
           child: Icon(_platformIcon(device.platform),
               color: Theme.of(context).colorScheme.primary, size: 20),
         ),
-        title: Text(device.name,
-            style: const TextStyle(fontWeight: FontWeight.w500)),
+        title: Row(
+          children: [
+            Text(device.name,
+                style: const TextStyle(fontWeight: FontWeight.w500)),
+            if (device.isTrusted) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('신뢰',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.w500)),
+              ),
+            ],
+          ],
+        ),
         subtitle: Text('${device.platformLabel} · ${device.ip}',
             style: const TextStyle(fontSize: 12)),
         trailing: FilledButton(

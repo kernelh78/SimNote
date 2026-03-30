@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'device_identity.dart';
 
 /// UDP 브로드캐스트 방식으로 같은 Wi-Fi 안의 SimNote 기기를 탐색
 ///
@@ -58,6 +59,7 @@ class DiscoveryService {
     final localIp = await getLocalIp();
     final deviceName = Platform.localHostname;
     final platform = Platform.operatingSystem;
+    final deviceId = await DeviceIdentity.getId();
 
     // UDP 소켓 열기
     try {
@@ -99,6 +101,7 @@ class DiscoveryService {
         'ip': localIp,
         'platform': platform,
         'port': servicePort,
+        'deviceId': deviceId,
       });
       final data = utf8.encode(payload);
       try {
@@ -136,10 +139,11 @@ class DiscoveryService {
       final map = jsonDecode(raw) as Map<String, dynamic>;
       if (map['app'] != 'simnote') return null;
       return DiscoveryMessage(
-        name: map['name'] as String,
-        ip: map['ip'] as String,
+        name:     map['name']     as String,
+        ip:       map['ip']       as String,
         platform: map['platform'] as String,
-        port: map['port'] as int,
+        port:     map['port']     as int,
+        deviceId: map['deviceId'] as String? ?? '',
       );
     } catch (_) {
       return null;
@@ -177,12 +181,14 @@ class DiscoveryMessage {
   final String name;
   final String ip;
   final String platform;
-  final int port;
+  final int    port;
+  final String deviceId;
 
   const DiscoveryMessage({
     required this.name,
     required this.ip,
     required this.platform,
     required this.port,
+    required this.deviceId,
   });
 }

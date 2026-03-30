@@ -2,13 +2,13 @@
 
 > 클라우드 없이, 같은 Wi-Fi 안의 내 기기끼리만 동기화되는 메모 앱
 
-작성일: 2026-03-29 | 최종 업데이트: 2026-03-29
+작성일: 2026-03-29 | 최종 업데이트: 2026-03-30
 
 ---
 
 ## 현재 상태
 
-**8단계 완료.** 맥 ↔ 안드로이드 암호화 동기화 + iOS 지원 + 마크다운 렌더링 + 노트 내보내기(PDF/텍스트) 완료.
+**10단계 완료.** 맥 ↔ 안드로이드 암호화 동기화 + iOS 지원 + 마크다운 렌더링 + 노트 내보내기(PDF/텍스트) + PDF 버그 수정 + 자동 동기화 완료.
 
 ---
 
@@ -104,18 +104,41 @@
 | 모바일: ⋮ 팝업 메뉴에 내보내기 항목 추가 | 완료 |
 | 플랫폼 공유 시트 연동 (share_plus) | 완료 |
 
+### 9단계 — PDF 버그 수정 ✅
+
+| 기능 | 상태 |
+|------|------|
+| macOS 샌드박스에서 PDF 생성 실패 수정 | 완료 |
+| `Printing.convertHtml()` → `pw.Document` 직접 생성으로 교체 | 완료 |
+| 한글 폰트: PdfGoogleFonts.notoSansKR 임베딩 | 완료 |
+| 마크다운 → pw 위젯 변환 (헤더, 목록, 코드블록, 굵게, 인용) | 완료 |
+| 임시 디렉토리 자동 생성 (PathNotFoundException 수정) | 완료 |
+
+### 10단계 — 자동 동기화 ✅
+
+| 기능 | 상태 |
+|------|------|
+| UDP 브로드캐스트에 deviceId 포함 (신뢰 기기 사전 확인) | 완료 |
+| 신뢰 기기 발견 즉시 자동 연결 (Presence-based) | 완료 |
+| 60초 쿨다운 (같은 기기에 연속 연결 방지) | 완료 |
+| 자동 동기화 설정 영구 저장 (앱 재시작 후 유지) | 완료 |
+| 동기화 패널에 자동 동기화 토글 스위치 | 완료 |
+| 기기 목록에 신뢰 기기 "신뢰" 뱃지 표시 | 완료 |
+
 ---
 
 ## 핵심 기술 구조
 
 ```
-기기 탐색:  UDP 브로드캐스트 (포트 8766, 3초마다)
+기기 탐색:  UDP 브로드캐스트 (포트 8766, 3초마다, deviceId 포함)
 인증:       TCP 소켓 + 6자리 PIN → SHA-256(PIN:salt) → 세션 키
 암호화:     AES-256-CBC, IV 앞부분 포함 (base64 인코딩)
 데이터:     JSON-Lines 프로토콜 over TCP (포트 8765)
 병합:       updatedAt 타임스탬프 비교 + 충돌 감지
 로컬 DB:    Isar (NoSQL, 오프라인 우선)
 상태관리:   Provider (AppProvider + SyncProvider)
+자동동기화: Presence-based (신뢰 기기 발견 즉시, 60초 쿨다운)
+PDF:        pdf 패키지 직접 생성 (pw.Document + Noto Sans KR 임베딩)
 ```
 
 ### 동기화 흐름 (5단계 기준)
@@ -160,12 +183,12 @@ sim_note/lib/
 │   └── device_identity.dart     # 기기 고유 UUID
 ├── providers/
 │   ├── app_provider.dart        # 노트/폴더/태그 상태 관리
-│   └── sync_provider.dart       # 동기화 상태, PIN Completer
+│   └── sync_provider.dart       # 동기화 상태, 자동동기화, PIN Completer
 ├── screens/
 │   ├── home_screen.dart         # PIN 다이얼로그, 충돌 처리, 갱신
 │   └── mobile_editor_screen.dart
 └── widgets/
-    ├── sync_panel.dart          # 안테나 버튼, 기기 목록, 동기화 로그 탭
+    ├── sync_panel.dart          # 안테나 버튼, 기기 목록, 자동동기화 토글, 로그 탭
     ├── note_tag_row.dart        # 태그 입력/표시 (Mac + Android 공용)
     ├── conflict_dialog.dart     # 충돌 해결 UI
     ├── sidebar.dart
@@ -201,12 +224,14 @@ sim_note/lib/
 | 암호화 후 기존 페어링 동기화 불가 | 구버전 페어링의 세션 키가 빈 문자열로 저장됨 → 서버가 kTrusted 전송 시 복호화 불가 | 서버에서 키 유효성 검사 후 빈 키면 PIN 재인증 강제 |
 | 맥 업데이트 후 동기화 여전히 실패 | 신버전 앱 설치 후 구버전 프로세스가 계속 실행 중 | 구 프로세스 종료 후 신버전 실행 |
 | PDF 한글 폰트 깨짐 방지 | pdf 패키지의 내장 폰트는 한글 미지원 | Printing.convertHtml() 사용 → WebKit 렌더러가 시스템 폰트로 처리 |
+| macOS PDF 내보내기 실패 ("Unable to create PDF: An unknown error occurred") | Printing.convertHtml()이 내부적으로 WKWebView를 사용하는데 macOS 샌드박스가 차단 | pdf 패키지의 pw.Document로 직접 생성 + PdfGoogleFonts.notoSansKR 임베딩으로 교체 |
+| PDF 내보내기 실패 (PathNotFoundException) | macOS 샌드박스 컨테이너 내 임시 디렉토리(Caches/com.simnote.simNote/) 미생성 | 파일 쓰기 전 Directory.create(recursive: true) 호출 |
 
 ---
 
 ## 향후 진행 사항
 
-- [ ] 자동 동기화 (같은 네트워크 감지 시 백그라운드 자동 실행)
+- [x] 자동 동기화 (신뢰 기기 발견 시 자동 실행)
 - [ ] iOS 실기기 배포 (애플 개발자 계정 필요)
 - [ ] Windows 지원
 - [ ] 비승인 기기 접근 차단 및 알림
