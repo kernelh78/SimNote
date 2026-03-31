@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -17,9 +18,22 @@ class NoteExporter {
     required String notebookName,
     required List<String> tagNames,
   }) async {
-    final content = _buildMarkdown(note, notebookName, tagNames);
-    final file    = await _writeTmp('${_safeFilename(note.title)}.md', content);
-    await _share([XFile(file.path, mimeType: 'text/plain')], note.title);
+    final content  = _buildMarkdown(note, notebookName, tagNames);
+    final filename = '${_safeFilename(note.title)}.md';
+
+    if (Platform.isMacOS) {
+      final path = await getSaveLocation(
+        suggestedName: filename,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'Markdown', extensions: ['md']),
+        ],
+      );
+      if (path == null) return; // 사용자가 취소
+      await File(path.path).writeAsString(content, flush: true);
+    } else {
+      final file = await _writeTmp(filename, content);
+      await _share([XFile(file.path, mimeType: 'text/plain')], note.title);
+    }
   }
 
   // ── PDF 내보내기 ──────────────────────────────────────────
@@ -44,9 +58,22 @@ class NoteExporter {
       ),
     );
 
-    final bytes = await doc.save();
-    final file  = await _writeTmpBytes('${_safeFilename(note.title)}.pdf', bytes);
-    await _share([XFile(file.path, mimeType: 'application/pdf')], note.title);
+    final bytes    = await doc.save();
+    final filename = '${_safeFilename(note.title)}.pdf';
+
+    if (Platform.isMacOS) {
+      final path = await getSaveLocation(
+        suggestedName: filename,
+        acceptedTypeGroups: const [
+          XTypeGroup(label: 'PDF', extensions: ['pdf']),
+        ],
+      );
+      if (path == null) return; // 사용자가 취소
+      await File(path.path).writeAsBytes(bytes, flush: true);
+    } else {
+      final file = await _writeTmpBytes(filename, bytes);
+      await _share([XFile(file.path, mimeType: 'application/pdf')], note.title);
+    }
   }
 
   // ── PDF 위젯 빌드 ─────────────────────────────────────────

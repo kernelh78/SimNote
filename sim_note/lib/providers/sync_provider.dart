@@ -276,9 +276,10 @@ class SyncProvider extends ChangeNotifier {
 
   /// 알 수 없는 기기 차단 → 차단 목록에 저장 + 연결 거부
   Future<void> blockUnknownDevice() async {
-    final id = unknownDeviceId;
+    final id   = unknownDeviceId;
+    final name = unknownDeviceName ?? '';
     if (id != null) {
-      await TrustedDevices.block(id);
+      await TrustedDevices.block(id, name: name);
     }
     unknownDeviceId   = null;
     unknownDeviceName = null;

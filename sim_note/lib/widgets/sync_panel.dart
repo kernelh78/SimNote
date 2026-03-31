@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/sync_provider.dart';
 import '../sync/sync_log.dart';
+import '../sync/trusted_devices.dart';
 
 /// 안테나 아이콘 버튼 (탭 → 바텀시트)
 class SyncButton extends StatelessWidget {
@@ -89,7 +90,7 @@ class _SyncPanelState extends State<_SyncPanel>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tab = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -144,6 +145,7 @@ class _SyncPanelState extends State<_SyncPanel>
           controller: _tab,
           tabs: const [
             Tab(text: '주변 기기'),
+            Tab(text: '차단 기기'),
             Tab(text: '동기화 로그'),
           ],
         ),
@@ -154,6 +156,7 @@ class _SyncPanelState extends State<_SyncPanel>
             controller: _tab,
             children: [
               _DevicesTab(sync: sync, bottomPad: bottom),
+              _BlockedTab(sync: sync, bottomPad: bottom),
               const _LogTab(),
             ],
           ),
@@ -249,6 +252,119 @@ class _DevicesTab extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ── 차단 기기 탭 ─────────────────────────────────────────────
+
+class _BlockedTab extends StatefulWidget {
+  final SyncProvider sync;
+  final double bottomPad;
+
+  const _BlockedTab({required this.sync, required this.bottomPad});
+
+  @override
+  State<_BlockedTab> createState() => _BlockedTabState();
+}
+
+class _BlockedTabState extends State<_BlockedTab> {
+  Map<String, String> _blocked = {}; // deviceId → name
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final devices = await TrustedDevices.getBlockedDevices();
+    if (mounted) setState(() { _blocked = devices; _loading = false; });
+  }
+
+  Future<void> _unblock(String deviceId) async {
+    await widget.sync.unblockDevice(deviceId);
+    if (mounted) setState(() => _blocked.remove(deviceId));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_blocked.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.block_outlined, size: 40, color: Colors.grey[300]),
+            const SizedBox(height: 12),
+            Text('차단된 기기가 없습니다',
+                style: TextStyle(color: Colors.grey[500], fontSize: 14)),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, widget.bottomPad + 20),
+      itemCount: _blocked.length,
+      separatorBuilder: (context, i) => const SizedBox(height: 8),
+      itemBuilder: (context, i) {
+        final entry  = _blocked.entries.elementAt(i);
+        final id     = entry.key;
+        final name   = entry.value.isNotEmpty ? entry.value : '알 수 없는 기기';
+        return Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: Colors.red.shade50,
+              child: Icon(Icons.block, color: Colors.red.shade400, size: 20),
+            ),
+            title: Text(name,
+                style: const TextStyle(fontWeight: FontWeight.w500)),
+            subtitle: Text(
+              id.length > 8 ? '${id.substring(0, 8)}...' : id,
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+            trailing: OutlinedButton(
+              onPressed: () => _showUnblockConfirm(context, id, name),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary),
+              ),
+              child: const Text('차단 해제'),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showUnblockConfirm(
+      BuildContext context, String deviceId, String name) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('차단 해제'),
+        content: Text('$name 기기의 차단을 해제할까요?\n이 기기가 다시 연결을 시도하면 허용 여부를 물어봅니다.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('차단 해제'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _unblock(deviceId);
   }
 }
 

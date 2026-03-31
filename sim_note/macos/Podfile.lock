@@ -1,4 +1,6 @@
 PODS:
+  - file_selector_macos (0.0.1):
+    - FlutterMacOS
   - FlutterMacOS (1.0.0)
   - isar_flutter_libs (1.0.0):
     - FlutterMacOS
@@ -8,12 +10,15 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
+  - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - isar_flutter_libs (from `Flutter/ephemeral/.symlinks/plugins/isar_flutter_libs/macos`)
   - printing (from `Flutter/ephemeral/.symlinks/plugins/printing/macos`)
   - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
 
 EXTERNAL SOURCES:
+  file_selector_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
   isar_flutter_libs:
@@ -24,6 +29,7 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
 
 SPEC CHECKSUMS:
+  file_selector_macos: 9e9e068e90ebee155097d00e89ae91edb2374db7
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   isar_flutter_libs: a65381780401f81ad6bf3f2e7cd0de5698fb98c4
   printing: c4cf83c78fd684f9bc318e6aadc18972aa48f617

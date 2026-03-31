@@ -5,8 +5,8 @@ import 'package:path_provider/path_provider.dart';
 
 /// 신뢰 기기 목록과 기기별 세션 키를 파일로 저장
 class TrustedDevices {
-  static Map<String, String>? _data;     // deviceId → keyHex
-  static Set<String>?          _blocked; // 차단된 deviceId 목록
+  static Map<String, String>? _data;    // deviceId → keyHex
+  static Map<String, String>? _blocked; // deviceId → deviceName
 
   static Future<bool> isTrusted(String deviceId) async {
     final data = await _load();
@@ -17,12 +17,12 @@ class TrustedDevices {
 
   static Future<bool> isBlocked(String deviceId) async {
     final blocked = await _loadBlocked();
-    return blocked.contains(deviceId);
+    return blocked.containsKey(deviceId);
   }
 
-  static Future<void> block(String deviceId) async {
+  static Future<void> block(String deviceId, {String name = ''}) async {
     final blocked = await _loadBlocked();
-    blocked.add(deviceId);
+    blocked[deviceId] = name;
     await _saveBlocked(blocked);
   }
 
@@ -32,19 +32,24 @@ class TrustedDevices {
     await _saveBlocked(blocked);
   }
 
-  static Future<List<String>> getBlockedIds() async {
-    final blocked = await _loadBlocked();
-    return blocked.toList();
+  /// 차단된 기기 목록 반환 (deviceId → 기기 이름)
+  static Future<Map<String, String>> getBlockedDevices() async {
+    return Map<String, String>.from(await _loadBlocked());
   }
 
-  static Future<Set<String>> _loadBlocked() async {
+  static Future<Map<String, String>> _loadBlocked() async {
     if (_blocked != null) return _blocked!;
     try {
       final file = await _blockedFile();
       if (await file.exists()) {
         final raw = jsonDecode(await file.readAsString());
+        if (raw is Map) {
+          _blocked = Map<String, String>.from(raw.cast<String, String>());
+          return _blocked!;
+        }
+        // 이전 형식(List) 마이그레이션 — 이름 없이 ID만 저장된 경우
         if (raw is List) {
-          _blocked = Set<String>.from(raw.cast<String>());
+          _blocked = {for (final id in raw) id as String: ''};
           return _blocked!;
         }
       }
@@ -53,9 +58,9 @@ class TrustedDevices {
     return _blocked!;
   }
 
-  static Future<void> _saveBlocked(Set<String> blocked) async {
+  static Future<void> _saveBlocked(Map<String, String> blocked) async {
     _blocked = blocked;
-    await (await _blockedFile()).writeAsString(jsonEncode(blocked.toList()));
+    await (await _blockedFile()).writeAsString(jsonEncode(blocked));
   }
 
   static Future<File> _blockedFile() async {
