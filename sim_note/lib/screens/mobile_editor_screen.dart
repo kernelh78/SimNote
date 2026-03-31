@@ -6,6 +6,7 @@ import '../export/note_exporter.dart';
 import '../providers/app_provider.dart';
 import '../models/note.dart';
 import '../widgets/note_tag_row.dart';
+import '../widgets/formatting_toolbar.dart';
 
 class MobileEditorScreen extends StatefulWidget {
   const MobileEditorScreen({super.key});
@@ -160,6 +161,12 @@ class _MobileEditorScreenState extends State<MobileEditorScreen> {
           ),
 
           const Divider(height: 20),
+          if (!_preview)
+            FormattingToolbar(
+              controller: _bodyController,
+              onChanged: () => _save(provider),
+            ),
+          if (!_preview) const Divider(height: 1),
 
           // ── 본문: 편집 or 마크다운 미리보기 ──────────────
           Expanded(

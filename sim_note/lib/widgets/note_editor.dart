@@ -7,6 +7,7 @@ import '../providers/app_provider.dart';
 import '../models/note.dart';
 import 'note_tag_row.dart';
 import 'sync_panel.dart';
+import 'formatting_toolbar.dart';
 
 class NoteEditor extends StatefulWidget {
   const NoteEditor({super.key});
@@ -142,6 +143,12 @@ class _NoteEditorState extends State<NoteEditor> {
           ),
         ),
         const Divider(height: 1),
+        if (!_preview)
+          FormattingToolbar(
+            controller: _bodyController,
+            onChanged: () => _save(provider),
+          ),
+        if (!_preview) const Divider(height: 1),
 
         // ── 제목 / 날짜 / 태그 (항상 표시) ──────────────────
         Padding(
