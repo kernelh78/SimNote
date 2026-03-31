@@ -20,3 +20,8 @@ pdf 및 txt 변환 가능 update
  - flutter pub get
 
  - flutter build windows --release
+
+
+# 에디터에 Apple Notes 스타일의 서식 입력 툴바를 추가
+
+ - 마크다운 문법을 직접 타이핑하지 않아도 버튼 클릭으로 서식을 적용할 수 있게 한다.
