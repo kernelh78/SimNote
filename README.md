@@ -1,5 +1,7 @@
 # Wi-Fi 안에서 내 폰과 PC가 알아서 동기화되는 메모 앱. 
 클라우드 서비스를 사용하지 않고 사설 WIFI환경에서 정해진 기기들간의 동기화.**
+동기화시 우선순위 확인
+
 
 ## Windows Build Method 
 
@@ -8,6 +10,7 @@
  - flutter pub get
 
  - flutter build windows --release
+
 
 
 ## 현재까지 진행사항
