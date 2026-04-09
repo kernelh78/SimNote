@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 // dart:typed_data provided via flutter/foundation.dart
 import 'package:flutter/foundation.dart';
+import '../core/errors.dart';
 import '../database/db_service.dart';
 import 'device_identity.dart';
 import 'sync_conflict.dart';
@@ -30,7 +31,7 @@ class SyncClient {
       socket = await Socket.connect(ip, port, timeout: _timeout);
       debugPrint('[SyncClient] 연결 성공: $ip:$port');
     } catch (e) {
-      throw '기기에 연결할 수 없습니다: $e';
+      throw SyncError('기기에 연결할 수 없습니다', technical: '$e');
     }
 
     try {
@@ -54,37 +55,36 @@ class SyncClient {
         // 3a. PIN 교환 + 세션 키 파생
         final salt = response['salt'] as String? ?? '';
         final pin  = await onPinNeeded();
-        if (pin == null) throw '사용자가 취소했습니다';
+        if (pin == null) throw const SyncError('사용자가 취소했습니다');
 
         sendMsg(socket, {'type': kPin, 'pin': pin});
 
         final pinResult = await incoming.first.timeout(_timeout);
-        if (pinResult['type'] != kPinOk) throw '잘못된 PIN입니다';
+        if (pinResult['type'] != kPinOk) throw const SyncError('잘못된 PIN입니다');
 
         sessionKey = SyncCrypto.deriveKey(pin, salt);
         await TrustedDevices.trust(serverId, sessionKey);
 
       } else if (responseType == kTrusted) {
         // 3b. 기존 신뢰 기기 — 저장된 키 사용
-        // (서버가 kTrusted를 보냈다면 유효한 키가 있음이 보장됨)
         final stored = await TrustedDevices.getKey(serverId);
         if (stored == null || stored.isEmpty) {
           // 키 불일치 — 이쪽만 키가 없는 예외 상황, 재연결 유도
-          throw 'PIN 재인증이 필요합니다. 동기화 버튼을 다시 눌러주세요.';
+          throw const SyncError('PIN 재인증이 필요합니다. 동기화 버튼을 다시 눌러주세요.');
         }
         sessionKey = stored;
 
       } else if (responseType == kRejected) {
         final reason = response['reason'] as String? ?? '';
         if (reason == 'blocked') {
-          throw '상대 기기에서 이 기기를 차단했습니다';
+          throw const SyncError('상대 기기에서 이 기기를 차단했습니다');
         } else if (reason == 'busy') {
-          throw '상대 기기가 다른 기기와 동기화 중입니다. 잠시 후 다시 시도해주세요';
+          throw const SyncError('상대 기기가 다른 기기와 동기화 중입니다. 잠시 후 다시 시도해주세요');
         } else {
-          throw '상대 기기에서 연결을 거부했습니다';
+          throw const SyncError('상대 기기에서 연결을 거부했습니다');
         }
       } else {
-        throw '알 수 없는 응답: $responseType';
+        throw SyncError('알 수 없는 응답입니다', technical: 'responseType=$responseType');
       }
 
       // 4. 동기화 요청 — 암호화 전송
@@ -93,7 +93,9 @@ class SyncClient {
 
       // 5. 암호화된 결과 수신 + 복호화
       final envelope = await incoming.first.timeout(_timeout);
-      if (envelope['type'] != kEncrypted) throw '동기화 응답 오류';
+      if (envelope['type'] != kEncrypted) {
+        throw const SyncError('동기화 응답을 받지 못했습니다');
+      }
 
       final syncResult   = decryptMsg(envelope, sessionKey);
       final remoteNotes  =

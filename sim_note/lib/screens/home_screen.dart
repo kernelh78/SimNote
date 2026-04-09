@@ -55,6 +55,18 @@ class _HomeScreenState extends State<HomeScreen> {
       _showPinInputDialog(sync);
     }
 
+    // 동기화 에러 시 SnackBar
+    if (sync.syncState == SyncState.error && _prevState != SyncState.error) {
+      final msg = sync.syncError ?? '동기화 중 오류가 발생했습니다';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: Theme.of(context).colorScheme.error,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
+
     // 동기화 완료 시 노트 목록 갱신 + 충돌 처리
     if (sync.syncState == SyncState.done && _prevState != SyncState.done) {
       context.read<AppProvider>().load();
@@ -120,22 +132,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sync = context.watch<SyncProvider>();
+    final isSyncing = sync.syncState == SyncState.connecting ||
+        sync.syncState == SyncState.syncing;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         if (constraints.maxWidth >= 700) {
           return Scaffold(
-            body: Row(
+            body: Column(
               children: [
-                const SizedBox(width: 220, child: Sidebar()),
-                const VerticalDivider(width: 1),
-                const SizedBox(width: 260, child: NoteList()),
-                const VerticalDivider(width: 1),
-                const Expanded(child: NoteEditor()),
+                if (isSyncing) const LinearProgressIndicator(minHeight: 2),
+                Expanded(
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 220, child: Sidebar()),
+                      const VerticalDivider(width: 1),
+                      const SizedBox(width: 260, child: NoteList()),
+                      const VerticalDivider(width: 1),
+                      const Expanded(child: NoteEditor()),
+                    ],
+                  ),
+                ),
               ],
             ),
           );
         }
-        return const MobileLayout();
+        return Column(
+          children: [
+            if (isSyncing) const LinearProgressIndicator(minHeight: 2),
+            const Expanded(child: MobileLayout()),
+          ],
+        );
       },
     );
   }

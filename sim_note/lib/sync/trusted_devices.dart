@@ -1,19 +1,90 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// 신뢰 기기 목록과 기기별 세션 키를 파일로 저장
+/// 신뢰 기기 목록과 기기별 세션 키를 관리
+/// - 세션 키: flutter_secure_storage (iOS Keychain / Android Keystore / macOS Keychain)
+/// - 차단 목록: 민감 정보 없으므로 기존 파일 저장 유지
 class TrustedDevices {
-  static Map<String, String>? _data;    // deviceId → keyHex
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    mOptions: MacOsOptions(),
+    iOptions: IOSOptions(),
+  );
+  static const _keyPrefix = 'simnote_key_';
+
+  static Map<String, String>? _cache;   // deviceId → keyHex (인메모리 캐시)
   static Map<String, String>? _blocked; // deviceId → deviceName
+  static bool _migrated = false;
+
+  // ── 구 버전 파일 → SecureStorage 마이그레이션 ─────────────
+
+  static Future<void> _ensureMigrated() async {
+    if (_migrated) return;
+    _migrated = true;
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final oldFile = File('${dir.path}/.simnote_trusted.json');
+      if (!await oldFile.exists()) return;
+
+      final raw = jsonDecode(await oldFile.readAsString());
+      if (raw is Map) {
+        for (final entry in raw.entries) {
+          final deviceId = entry.key as String;
+          final keyHex   = entry.value as String;
+          if (keyHex.isNotEmpty) {
+            await _storage.write(key: '$_keyPrefix$deviceId', value: keyHex);
+          }
+        }
+      }
+      await oldFile.delete();
+    } catch (_) {}
+  }
+
+  // ── 신뢰 기기 ─────────────────────────────────────────────
 
   static Future<bool> isTrusted(String deviceId) async {
     final data = await _load();
     return data.containsKey(deviceId);
   }
 
-  // ── 차단 목록 ────────────────────────────────────────────
+  /// 기기를 신뢰 목록에 추가하고 세션 키를 Keychain에 저장
+  static Future<void> trust(String deviceId, Uint8List sessionKey) async {
+    final hex = _toHex(sessionKey);
+    _cache ??= {};
+    _cache![deviceId] = hex;
+    await _storage.write(key: '$_keyPrefix$deviceId', value: hex);
+  }
+
+  /// 저장된 세션 키 반환 (없으면 null)
+  static Future<Uint8List?> getKey(String deviceId) async {
+    final data = await _load();
+    final hex  = data[deviceId];
+    if (hex == null || hex.isEmpty) return null;
+    return _fromHex(hex);
+  }
+
+  static Future<Map<String, String>> _load() async {
+    if (_cache != null) return _cache!;
+    await _ensureMigrated();
+    try {
+      final all  = await _storage.readAll();
+      _cache = {};
+      for (final entry in all.entries) {
+        if (entry.key.startsWith(_keyPrefix)) {
+          final deviceId = entry.key.substring(_keyPrefix.length);
+          _cache![deviceId] = entry.value;
+        }
+      }
+    } catch (_) {
+      _cache = {};
+    }
+    return _cache!;
+  }
+
+  // ── 차단 목록 ─────────────────────────────────────────────
 
   static Future<bool> isBlocked(String deviceId) async {
     final blocked = await _loadBlocked();
@@ -68,51 +139,7 @@ class TrustedDevices {
     return File('${dir.path}/.simnote_blocked.json');
   }
 
-  /// 기기를 신뢰 목록에 추가하고 세션 키를 저장
-  static Future<void> trust(String deviceId, Uint8List sessionKey) async {
-    final data = await _load();
-    data[deviceId] = _toHex(sessionKey);
-    await _save(data);
-  }
-
-  /// 저장된 세션 키 반환 (없으면 null)
-  static Future<Uint8List?> getKey(String deviceId) async {
-    final data = await _load();
-    final hex = data[deviceId];
-    if (hex == null) return null;
-    return _fromHex(hex);
-  }
-
-  static Future<Map<String, String>> _load() async {
-    if (_data != null) return _data!;
-    try {
-      final file = await _file();
-      if (await file.exists()) {
-        final raw = jsonDecode(await file.readAsString());
-        if (raw is Map) {
-          _data = Map<String, String>.from(raw);
-          return _data!;
-        }
-        // 이전 형식(List) 마이그레이션
-        if (raw is List) {
-          _data = {for (final id in raw) id as String: ''};
-          return _data!;
-        }
-      }
-    } catch (_) {}
-    _data = {};
-    return _data!;
-  }
-
-  static Future<void> _save(Map<String, String> data) async {
-    _data = data;
-    await (await _file()).writeAsString(jsonEncode(data));
-  }
-
-  static Future<File> _file() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/.simnote_trusted.json');
-  }
+  // ── 유틸리티 ──────────────────────────────────────────────
 
   static String _toHex(Uint8List bytes) =>
       bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();

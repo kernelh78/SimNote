@@ -63,6 +63,7 @@ class SyncProvider extends ChangeNotifier {
   int                lastSyncCount = 0;
   String?            syncError;
   List<SyncConflict> pendingConflicts = [];
+  DateTime?          lastSyncAt;
 
   // 자동 동기화
   bool      autoSyncEnabled = false;
@@ -85,6 +86,7 @@ class SyncProvider extends ChangeNotifier {
 
   Future<void> start() async {
     autoSyncEnabled = await SyncStateStore.getAutoSync();
+    lastSyncAt      = await SyncStateStore.getLastSyncAt();
     await _startDiscovery();
     await _startServer();
   }
@@ -141,6 +143,7 @@ class SyncProvider extends ChangeNotifier {
       lastSyncCount    = count;
       pendingConflicts = conflicts;
       syncState        = SyncState.done;
+      lastSyncAt       = DateTime.now();
       notifyListeners();
       Future.delayed(const Duration(seconds: 3), () {
         if (pendingConflicts.isEmpty) {
@@ -232,6 +235,7 @@ class SyncProvider extends ChangeNotifier {
       lastSyncCount    = result.changed;
       pendingConflicts = result.conflicts;
       syncState        = SyncState.done;
+      lastSyncAt       = DateTime.now();
       notifyListeners();
 
       Future.delayed(const Duration(seconds: 3), () {

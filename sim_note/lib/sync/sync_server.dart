@@ -65,11 +65,14 @@ class SyncServer {
     String? pendingSalt;
     String? pendingClientId;
     Uint8List? sessionKey;
+    int pinAttempts = 0;         // 잘못된 PIN 시도 횟수
+    Timer? pinExpiry;            // PIN 5분 만료 타이머
 
     try {
       await for (final msg in receiveMsg(client)) {
         final type = msg['type'] as String;
         debugPrint('[SyncServer] 수신: $type');
+
 
         switch (type) {
           case kHello:
@@ -105,6 +108,14 @@ class SyncServer {
               // 허용 → PIN 흐름 진행
               pendingPin  = _generatePin();
               pendingSalt = SyncCrypto.randomSalt();
+              pinAttempts = 0;
+              // PIN 5분 후 자동 만료
+              pinExpiry?.cancel();
+              pinExpiry = Timer(const Duration(minutes: 5), () {
+                debugPrint('[SyncServer] PIN 만료 — 연결 종료');
+                try { sendMsg(client, {'type': kRejected, 'reason': 'pin_expired'}); } catch (_) {}
+                client.destroy();
+              });
               sendMsg(client, {
                 'type':     kPinRequired,
                 'deviceId': myId,
@@ -118,14 +129,26 @@ class SyncServer {
             if (entered == pendingPin &&
                 pendingSalt != null &&
                 pendingClientId != null) {
+              pinExpiry?.cancel();
+              pinExpiry  = null;
               sessionKey = SyncCrypto.deriveKey(entered, pendingSalt);
               await TrustedDevices.trust(pendingClientId, sessionKey);
               sendMsg(client, {'type': kPinOk});
+              pendingPin  = null;
+              pendingSalt = null;
             } else {
+              pinAttempts++;
+              debugPrint('[SyncServer] 잘못된 PIN ($pinAttempts/3)');
+              if (pinAttempts >= 3) {
+                // 3회 실패 — 연결 차단
+                debugPrint('[SyncServer] PIN 3회 실패 — 연결 종료');
+                pinExpiry?.cancel();
+                sendMsg(client, {'type': kRejected, 'reason': 'pin_failed'});
+                await client.close();
+                return;
+              }
               sendMsg(client, {'type': kPinWrong});
             }
-            pendingPin  = null;
-            pendingSalt = null;
 
           case kEncrypted:
             if (sessionKey == null) {
@@ -154,6 +177,7 @@ class SyncServer {
       debugPrint('[SyncServer] 처리 오류: $e');
       onError?.call('연결 오류: $e');
     } finally {
+      pinExpiry?.cancel();
       client.destroy();
     }
   }

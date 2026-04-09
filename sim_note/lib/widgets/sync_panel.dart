@@ -5,6 +5,15 @@ import '../providers/sync_provider.dart';
 import '../sync/sync_log.dart';
 import '../sync/trusted_devices.dart';
 
+String _relativeTime(DateTime? time) {
+  if (time == null) return '동기화 기록 없음';
+  final diff = DateTime.now().difference(time);
+  if (diff.inSeconds < 60) return '방금 전 동기화됨';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}분 전 동기화됨';
+  if (diff.inHours < 24) return '${diff.inHours}시간 전 동기화됨';
+  return '${diff.inDays}일 전 동기화됨';
+}
+
 /// 안테나 아이콘 버튼 (탭 → 바텀시트)
 class SyncButton extends StatelessWidget {
   const SyncButton({super.key});
@@ -22,7 +31,18 @@ class SyncButton extends StatelessWidget {
           tooltip: '기기 동기화',
           onPressed: () => _openPanel(context),
         ),
-        if (count > 0)
+        if (sync.syncState == SyncState.error)
+          Positioned(
+            right: 4, top: 4,
+            child: Container(
+              width: 10, height: 10,
+              decoration: const BoxDecoration(
+                color: Colors.red,
+                shape: BoxShape.circle,
+              ),
+            ),
+          )
+        else if (count > 0)
           Positioned(
             right: 4, top: 4,
             child: Container(
@@ -123,6 +143,10 @@ class _SyncPanelState extends State<_SyncPanel>
                     Text('내 IP: ${sync.localIp}',
                         style:
                             TextStyle(fontSize: 12, color: Colors.grey[500])),
+                  Text(
+                    _relativeTime(sync.lastSyncAt),
+                    style: TextStyle(fontSize: 11, color: Colors.grey[400]),
+                  ),
                 ],
               ),
               IconButton(

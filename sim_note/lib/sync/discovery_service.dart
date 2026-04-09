@@ -150,22 +150,34 @@ class DiscoveryService {
     }
   }
 
+  String _subnetBroadcast(String ip) => subnetBroadcast(ip);
+  bool _isVirtualInterface(String name) => isVirtualInterface(name);
+  bool _isCommonPrivate(String ip) => isCommonPrivate(ip);
+
+  // ── 테스트 가능한 순수 함수 (static) ────────────────────
+
   /// 192.168.0.5 → 192.168.0.255 (서브넷 /24 가정)
-  String _subnetBroadcast(String ip) {
+  @visibleForTesting
+  static String subnetBroadcast(String ip) {
     final parts = ip.split('.');
     if (parts.length == 4) return '${parts[0]}.${parts[1]}.${parts[2]}.255';
     return '255.255.255.255';
   }
 
-  bool _isVirtualInterface(String name) =>
+  /// VPN/Docker/가상 인터페이스 이름 여부
+  @visibleForTesting
+  static bool isVirtualInterface(String name) =>
       name.contains('tun') ||
       name.contains('tap') ||
       name.contains('vpn') ||
       name.contains('docker') ||
       name.contains('bridge') ||
-      name.contains('vmnet');
+      name.contains('vmnet') ||
+      name.startsWith('br-'); // Docker 브리지 네트워크 (br-<hash>)
 
-  bool _isCommonPrivate(String ip) {
+  /// RFC 1918 사설 IP 여부
+  @visibleForTesting
+  static bool isCommonPrivate(String ip) {
     if (ip.startsWith('192.168.')) return true;
     if (ip.startsWith('10.')) return true;
     final parts = ip.split('.');

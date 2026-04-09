@@ -10,7 +10,10 @@ class SyncConflict {
     required this.remote,
   });
 
-  String get title => local['title'] as String? ?? '(제목 없음)';
+  String get title {
+    final t = local['title'] as String? ?? '';
+    return t.isEmpty ? '(제목 없음)' : t;
+  }
   String get localBody => local['body'] as String? ?? '';
   String get remoteBody => remote['body'] as String? ?? '';
   DateTime get localUpdatedAt =>
