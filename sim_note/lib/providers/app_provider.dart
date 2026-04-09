@@ -18,16 +18,22 @@ class AppProvider extends ChangeNotifier {
   SidebarMode sidebarMode = SidebarMode.notebook;
 
   String searchQuery = '';
+  bool isLoading = false;
 
   // ── 초기 로드 ─────────────────────────────────────────────
 
   Future<void> load() async {
+    isLoading = true;
+    notifyListeners();
+
     notebooks = await DbService.getAllNotebooks();
     allTags = await DbService.getAllTags();
 
     if (notebooks.isNotEmpty) {
       await selectNotebook(notebooks.first);
     }
+
+    isLoading = false;
     notifyListeners();
   }
 

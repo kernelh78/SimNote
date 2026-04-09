@@ -10,6 +10,16 @@ import '../sync/sync_log.dart';
 import '../sync/sync_protocol.dart';
 import '../sync/sync_state_store.dart';
 
+/// SimNote의 모든 로컬 DB 작업을 담당하는 정적 서비스
+///
+/// Isar ORM을 사용하며 [Note], [Notebook], [Tag] 세 컬렉션을 관리한다.
+///
+/// 삭제 정책: 노트는 즉시 제거하지 않고 `isDeleted=true`로 표시하는
+/// **소프트 딜리트**를 사용한다. 동기화 상대방이 삭제 사실을 인지할 수 있도록
+/// `updatedAt`도 함께 갱신한다.
+///
+/// 태그 정책: 어떤 활성 노트에도 연결되지 않은 태그는 [_pruneOrphanTags]가
+/// 자동으로 삭제한다. 태그는 노트 삭제/수정 후 자동 정리된다.
 class DbService {
   static late Isar _isar;
 
@@ -187,7 +197,10 @@ class DbService {
     await _pruneOrphanTags();
   }
 
-  /// 어떤 메모에도 연결되지 않은 태그를 DB에서 삭제
+  /// 활성 노트에 연결되지 않은 고아 태그를 DB에서 일괄 삭제한다.
+  ///
+  /// 삭제된 노트만 갖는 태그도 제거 대상이다.
+  /// 노트 삭제·태그 해제 후 자동 호출된다.
   static Future<void> _pruneOrphanTags() async {
     final tags = await _isar.tags.where().findAll();
     final orphanIds = <Id>[];
@@ -249,7 +262,10 @@ class DbService {
 
   // ── 동기화 ────────────────────────────────────────────────
 
-  /// 이 기기의 모든 노트를 동기화용 Map 리스트로 반환 (삭제된 것 포함)
+  /// 이 기기의 모든 노트를 동기화용 Map 목록으로 반환한다.
+  ///
+  /// 소프트 딜리트된 노트도 포함된다 — 상대방에게 삭제 사실을 전파하기 위해서다.
+  /// `syncId`가 없는 레거시 노트는 이 시점에 UUID를 부여한다.
   static Future<List<Map<String, dynamic>>> getAllNotesForSync() async {
     final notes = await _isar.notes.where().findAll();
     final result = <Map<String, dynamic>>[];
@@ -273,10 +289,15 @@ class DbService {
     return result;
   }
 
-  /// 원격 기기에서 받은 노트 목록을 로컬에 병합
-  /// - 마지막 동기화 이후 양쪽 모두 수정 → 충돌로 수집
-  /// - 한쪽만 수정 → 최신 버전 채택
-  /// - 삭제 전파 지원
+  /// 원격 기기에서 받은 [remote] 노트 목록을 로컬 DB에 병합한다.
+  ///
+  /// 병합 규칙:
+  /// - 마지막 동기화 이후 **양쪽 모두 수정**됐고 내용이 다르면 → [SyncConflict] 목록에 추가
+  /// - **원격만 더 최신**이면 → 로컬을 덮어씀
+  /// - **로컬만 더 최신**이면 → 원격 무시
+  /// - 원격 노트가 로컬에 **없으면** → 새로 삽입 (단, 삭제된 노트는 무시)
+  ///
+  /// 반환값: 변경된 노트 수 + 충돌 목록
   static Future<({int changed, List<SyncConflict> conflicts})>
       mergeRemoteNotes(List<Map<String, dynamic>> remote) async {
     int changed = 0;

@@ -44,22 +44,24 @@ class NoteList extends StatelessWidget {
 
         // 목록
         Expanded(
-          child: notes.isEmpty
-              ? const Center(
-                  child: Text(
-                    '메모가 없습니다',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                )
-              : ListView.separated(
-                  itemCount: notes.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, index) => _NoteListItem(
-                    note: notes[index],
-                    provider: provider,
-                    onTap: onNoteTap,
-                  ),
-                ),
+          child: provider.isLoading
+              ? const _NoteListSkeleton()
+              : notes.isEmpty
+                  ? const Center(
+                      child: Text(
+                        '메모가 없습니다',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  : ListView.separated(
+                      itemCount: notes.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (context, index) => _NoteListItem(
+                        note: notes[index],
+                        provider: provider,
+                        onTap: onNoteTap,
+                      ),
+                    ),
         ),
       ],
     );
@@ -74,6 +76,97 @@ class NoteList extends StatelessWidget {
     return p.selectedNotebook?.name ?? '';
   }
 }
+
+// ── 로딩 스켈레톤 ────────────────────────────────────────────
+
+class _NoteListSkeleton extends StatefulWidget {
+  const _NoteListSkeleton();
+
+  @override
+  State<_NoteListSkeleton> createState() => _NoteListSkeletonState();
+}
+
+class _NoteListSkeletonState extends State<_NoteListSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.3, end: 0.7).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (context, _) => ListView.separated(
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: 6,
+        separatorBuilder: (_, __) => const Divider(height: 1),
+        itemBuilder: (context, _) => _SkeletonItem(opacity: _anim.value),
+      ),
+    );
+  }
+}
+
+class _SkeletonItem extends StatelessWidget {
+  final double opacity;
+  const _SkeletonItem({required this.opacity});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context)
+        .colorScheme
+        .onSurface
+        .withOpacity(opacity * 0.15);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 14, width: 140,
+            decoration: BoxDecoration(
+              color: color, borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            height: 11, width: double.infinity,
+            decoration: BoxDecoration(
+              color: color, borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            height: 10, width: 60,
+            decoration: BoxDecoration(
+              color: color.withOpacity(color.opacity * 0.7),
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── 노트 아이템 ──────────────────────────────────────────────
 
 class _NoteListItem extends StatelessWidget {
   final Note note;
