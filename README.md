@@ -62,3 +62,32 @@
    - 필요시 데이터 페이징, 캐싱 등 적용
 
 ---
+
+1-1. 보안 — 세션 키 저장 방식 교체
+* pubspec.yaml: flutter_secure_storage: ^9.2.4 추가
+* trusted_devices.dart: 세션 키 저장을 평문 JSON 파일 → iOS Keychain/Android Keystore/macOS Keychain으로 교체. 앱 최초 실행 시 기존 파일이 있으면 자동 마이그레이션 후 삭제
+* DebugProfile.entitlements, Release.entitlements: macOS Keychain 접근 권한 추가
+1-2. 에러 처리 — 침묵하는 실패 제거
+* lib/core/errors.dart 신규 생성: SimNoteError, SyncError, CryptoError, StorageError 타입 정의
+* sync_client.dart: 문자열 throw '...' → throw SyncError('...') 교체
+* home_screen.dart: 동기화 에러 발생 시 빨간 SnackBar 표시 추가
+1-3. 테스트
+* test/widget_test.dart: 깨진 MyApp 참조 수정
+* test/sync/sync_crypto_test.dart: 암호화 단위 테스트 11개
+* test/sync/sync_conflict_test.dart: 충돌 데이터 클래스 테스트 8개
+보너스 버그 수정: 테스트 도중 발견한 SyncConflict.title getter가 빈 문자열을 '(제목 없음)'으로 처리 못하는 버그도 함께 수정했습니다.
+
+2-1. UI/UX 피드백 강화
+* home_screen.dart: 동기화 중(connecting/syncing) 화면 상단에 LinearProgressIndicator (2px 높이) 표시
+* sync_panel.dart:
+    * 동기화 아이콘에 에러 상태 시 빨간 점 배지 추가
+    * 패널 헤더에 "3분 전 동기화됨" 형태의 상대 시각 표시
+* sync_provider.dart: lastSyncAt 상태 추가, 앱 시작 및 동기화 완료 시 업데이트
+2-2. 보안 강화
+* sync_server.dart:
+    * PIN 생성 후 5분 만료 타이머 추가 — 만료 시 연결 자동 종료
+    * 잘못된 PIN 3회 입력 시 연결 차단
+2-3. 멀티플랫폼 테스트
+* discovery_service.dart: IP 판별 순수 함수 3개 @visibleForTesting static 메서드로 노출. Docker br-<hash> 인터페이스 패턴도 함께 추가 수정
+* test/platform/discovery_service_test.dart: IP 변환·가상 인터페이스·사설 IP 판별 테스트 20개
+
