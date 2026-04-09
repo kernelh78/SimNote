@@ -91,12 +91,12 @@
 * discovery_service.dart: IP 판별 순수 함수 3개 @visibleForTesting static 메서드로 노출. Docker br-<hash> 인터페이스 패턴도 함께 추가 수정
 * test/platform/discovery_service_test.dart: IP 변환·가상 인터페이스·사설 IP 판별 테스트 20개
 
-
 3-1. 코드 문서화 (DartDoc)
-sync_crypto.dart: 클래스에 알고리즘 명세 (SHA-256 키 파생, AES-256-CBC, IV 포맷), 메서드 4개에 파라미터·반환값 설명
-sync_protocol.dart: 메시지 타입 상수 12개에 방향·페이로드 구조 설명, JSON-Lines 방식 설명, noteToMap 필드 목록
-db_service.dart: 클래스에 소프트 딜리트·태그 정책 설명, _pruneOrphanTags·getAllNotesForSync·mergeRemoteNotes 병합 규칙 문서화
+* sync_crypto.dart: 클래스에 알고리즘 명세 (SHA-256 키 파생, AES-256-CBC, IV 포맷), 메서드 4개에 파라미터·반환값 설명
+* sync_protocol.dart: 메시지 타입 상수 12개에 방향·페이로드 구조 설명, JSON-Lines 방식 설명, noteToMap 필드 목록
+* db_service.dart: 클래스에 소프트 딜리트·태그 정책 설명, _pruneOrphanTags·getAllNotesForSync·mergeRemoteNotes 병합 규칙 문서화
 3-2. 성능
-note_list.dart는 ListView.separated (lazy builder) 이미 사용 중 — 추가 최적화 불필요
-app_provider.dart: isLoading 상태 추가, load() 시작/완료 시 토글
-note_list.dart: 로딩 중 펄스 애니메이션 스켈레톤 UI 표시 (6개 행, 밝기 0.3↔0.7 반복)
+* note_list.dart는 ListView.separated (lazy builder) 이미 사용 중 — 추가 최적화 불필요
+* app_provider.dart: isLoading 상태 추가, load() 시작/완료 시 토글
+* note_list.dart: 로딩 중 펄스 애니메이션 스켈레톤 UI 표시 (6개 행, 밝기 0.3↔0.7 반복)
+
